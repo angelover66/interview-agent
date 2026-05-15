@@ -1,0 +1,30 @@
+# Environment & secrets
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (local only — demo data is committed)
+# data/ is committed as demo seed data
+
+# Logs
+*.log

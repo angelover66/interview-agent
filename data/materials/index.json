@@ -1,0 +1,28 @@
+{
+  "resumes": [
+    {
+      "file": "resume_张明.txt",
+      "type": "resume",
+      "title": "张明 — 飞书高级产品经理",
+      "imported_at": "2026-05-10T13:25:22.720126"
+    }
+  ],
+  "projects": [
+    {
+      "file": "飞书审批模块重构项目文档.txt",
+      "type": "project",
+      "title": "飞书审批流可视化配置引擎重构",
+      "imported_at": "2026-05-10T13:25:22.720133"
+    }
+  ],
+  "jds": [
+    {
+      "file": "字节跳动B端产品经理JD.txt",
+      "type": "jd",
+      "title": "字节跳动 资深B端产品经理（商业化方向）",
+      "imported_at": "2026-05-10T13:25:22.720134"
+    }
+  ],
+  "notes": [],
+  "updated_at": "2026-05-10T13:25:22.720135"
+}

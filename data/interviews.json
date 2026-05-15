@@ -1,0 +1,80 @@
+[
+  {
+    "id": 1,
+    "company": "字节跳动",
+    "position": "资深B端产品经理（商业化）",
+    "round": "一面",
+    "status": "有结果",
+    "result": "通过",
+    "interview_date": "2026-04-15",
+    "experience": "问了商业化思维和审批流重构，重点在价值识别",
+    "notes": "",
+    "created_at": "2026-04-10T10:00:00",
+    "updated_at": "2026-04-16T10:00:00"
+  },
+  {
+    "id": 2,
+    "company": "字节跳动",
+    "position": "资深B端产品经理（商业化）",
+    "round": "二面",
+    "status": "待面试",
+    "result": "",
+    "interview_date": "2026-04-22",
+    "experience": "",
+    "notes": "准备商业化案例",
+    "created_at": "2026-04-16T11:00:00",
+    "updated_at": "2026-04-16T11:00:00"
+  },
+  {
+    "id": 3,
+    "company": "钉钉",
+    "position": "高级B端产品经理",
+    "round": "HR面",
+    "status": "有结果",
+    "result": "挂",
+    "interview_date": "2026-04-10",
+    "experience": "HR面聊了离职动机和职业规划，感觉回答不够有说服力",
+    "notes": "",
+    "created_at": "2026-04-05T09:00:00",
+    "updated_at": "2026-04-11T10:00:00"
+  },
+  {
+    "id": 4,
+    "company": "腾讯",
+    "position": "企业微信B端产品组长",
+    "round": "一面",
+    "status": "已面试",
+    "result": "待定",
+    "interview_date": "2026-04-18",
+    "experience": "面了1.5小时，系统设计题偏多，要补系统设计",
+    "notes": "",
+    "created_at": "2026-04-15T14:00:00",
+    "updated_at": "2026-04-18T17:00:00"
+  },
+  {
+    "id": 5,
+    "company": "飞书",
+    "position": "商业化产品专家",
+    "round": "一面",
+    "status": "有结果",
+    "result": "通过",
+    "interview_date": "2026-05-06",
+    "experience": "面了商业化案例分析和定价策略",
+    "notes": "感觉不错",
+    "created_at": "2026-04-28T10:00:00",
+    "updated_at": "2026-05-07T10:00:00"
+  },
+  {
+    "id": 6,
+    "company": "飞书",
+    "position": "商业化产品专家",
+    "round": "二面",
+    "status": "待面试",
+    "result": "",
+    "interview_date": "2026-05-15",
+    "experience": "",
+    "notes": "准备GTM案例",
+    "created_at": "2026-05-07T11:00:00",
+    "updated_at": "2026-05-07T11:00:00"
+  }
+]

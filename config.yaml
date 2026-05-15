@@ -1,0 +1,24 @@
+# Interview Agent 配置
+llm:
+  provider: "deepseek"       # anthropic | deepseek | openai
+  model: "deepseek-chat"
+  api_key: ""  # 请设置环境变量 DEEPSEEK_API_KEY，或在 .env 文件中填写
+  max_tokens: 4096
+  temperature: 0.7
+
+storage:
+  base_dir: "./data"
+
+search:
+  provider: "tavily"         # tavily | serpapi | none
+  api_key: ""
+
+mock:
+  max_questions: 10
+  question_timeout_minutes: 5
+  evaluation_dimensions:
+    - 逻辑架构
+    - B端思维
+    - 数据意识
+    - 岗位匹配度
+    - 表达质量
