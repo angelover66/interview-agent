@@ -41,7 +41,7 @@ def parse_command(text: str) -> tuple[str, str] | None:
     skill_name = parts[0].lower()
     args = parts[1] if len(parts) > 1 else ""
 
-    if skill_name in {"material", "prep", "mock", "tracker", "help"}:
+    if skill_name in {"material", "prep", "mock", "obsidian", "help"}:
         return (skill_name, args)
     return None
 
@@ -53,6 +53,7 @@ _INTENT_PATTERNS = [
     (r"(查看|列出|展示|list|ls).*(简历|项目|素材|文件|库)", "material", "list"),
     (r"(搜索|查找|找|search|find).*", "material", "search"),
     (r"(画像|profile|我的情况|综合情况)", "material", "profile"),
+    (r"(删除|remove|delete).*(素材|文件|简历|项目)", "material", "delete"),
 
     (r"(准备|准备面试|prep).*(公司|岗位|面试)", "prep", "for"),
     (r"(问|提问|问题|ask|是什么|为什么|怎么做)", "prep", "ask"),
@@ -65,10 +66,10 @@ _INTENT_PATTERNS = [
     (r"(结束|结束面试|stop|end)", "mock", "end"),
     (r"(评估|评分|review|评价|反馈)", "mock", "review"),
 
-    (r"(记录|添加记录|面试记录|tracker).*(添加|新增|记)", "tracker", "add"),
-    (r"(查看记录|tracker list|面试列表)", "tracker", "list"),
-    (r"(更新|修改|tracker update)", "tracker", "update"),
-    (r"(统计|数据看板|stats|看板)", "tracker", "stats"),
+    (r"(obsidian|vault|笔记库|知识库).*(搜索|查找)", "obsidian", "search"),
+    (r"(obsidian|vault).*(扫描|重建|刷新)", "obsidian", "scan"),
+    (r"(obsidian|vault).*(查看|树|结构|目录|tree)", "obsidian", "tree"),
+    (r"(obsidian|vault).*(导入|引)", "obsidian", "import"),
 ]
 
 
@@ -87,6 +88,7 @@ def get_help_text() -> str:
   material list            查看素材分类
   material search <关键词>  搜索素材
   material profile         生成候选人画像
+  material delete <文件名>   删除指定素材
 
 📖 [b]面试准备 (prep)[/b]
   prep for <公司> <岗位>    基于素材生成定制学习材料
@@ -101,11 +103,11 @@ def get_help_text() -> str:
   mock end                 提前结束
   mock review              获取评估报告
 
-📊 [b]面试追踪 (tracker)[/b]
-  tracker add              添加面试记录
-  tracker list             查看所有记录
-  tracker update <id>      更新面试进度
-  tracker stats            统计看板
+📒 [b]Obsidian 集成 (obsidian)[/b]
+  obsidian tree            查看 Vault 目录结构
+  obsidian search <关键词>  搜索 Vault 全部素材
+  obsidian read <序号>     预览搜索到的文件
+  obsidian import <序号>   将文件导入 Agent 素材库
 
 ❓ [b]其他[/b]
   help                     显示此帮助

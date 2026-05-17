@@ -18,8 +18,9 @@ console = Console()
 class PrepSkill:
     """面试准备 Skill"""
 
-    def __init__(self, storage: StorageManager):
+    def __init__(self, storage: StorageManager, obsidian_connector=None):
         self.storage = storage
+        self.obsidian = obsidian_connector  # ObsidianConnector 实例（可选）
         self._conversation_history: list[dict] = []
         self._current_target: str = ""
 
@@ -76,6 +77,15 @@ class PrepSkill:
             parts.append("【素材摘要】")
             parts.extend(material_summary)
             parts.append("")
+
+        # Obsidian Vault 概览
+        if self.obsidian:
+            try:
+                vault_files = self.obsidian._scan()
+                parts.append(f"【Obsidian 知识库】已连接，共 {len(vault_files)} 个文件可用，使用 material search 可搜索")
+                parts.append("")
+            except Exception:
+                pass
 
         return "\n".join(parts)
 

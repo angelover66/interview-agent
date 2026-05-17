@@ -26,6 +26,8 @@ class MockSkill:
         self.storage = storage
         self._prompt_cache = {}
         self.current_session: MockSession | None = None
+        self._selected_resume_path: str = ""
+        self._selected_jd_path: str = ""
 
     def _load_prompt(self, name: str) -> str:
         if name not in self._prompt_cache:
@@ -63,41 +65,57 @@ class MockSkill:
         ))
 
     def _build_interviewer_context(self) -> str:
-        """构建面试官角色上下文。"""
-        profile = self.storage.load_profile()
+        """构建面试官角色上下文。优先使用用户选定的简历和 JD 文件。"""
         profile_summary = ""
-        if profile:
-            profile_summary = (
-                f"姓名: {profile.name}\n"
-                f"当前职位: {profile.current_title}\n"
-                f"经验年限: {profile.years_of_experience}\n"
-                f"核心技能: {', '.join(profile.core_skills)}\n"
-                f"亮点: {'; '.join(profile.highlight_achievements)}\n"
-                f"弱点: {'; '.join(profile.weak_areas)}\n"
-                f"项目经验:\n" + "\n".join(
-                    f"  - {p['name']} ({p.get('role','')}): {'; '.join(p.get('metrics',[]))}"
-                    for p in (profile.key_projects or [])
-                )
-            )
 
-        # 查找 JD
-        jd_context = ""
-        index = self.storage.get_index()
-        for jd_entry in index.get("jds", []):
+        # 优先使用选定的简历文件
+        if self._selected_resume_path:
             try:
-                jd_path = jd_entry.get("path", "")
-                if jd_path:
-                    content = Path(jd_path).read_text(encoding="utf-8", errors="replace")
-                    jd_context += f"\n{content[:3000]}"
+                resume_content = Path(self._selected_resume_path).read_text(encoding="utf-8", errors="replace")
+                profile_summary = f"【候选人简历内容】\n{resume_content[:3000]}"
             except Exception:
-                continue
+                pass
+
+        # 回退到画像
+        if not profile_summary:
+            profile = self.storage.load_profile()
+            if profile:
+                profile_summary = (
+                    f"姓名: {profile.name}\n"
+                    f"当前职位: {profile.current_title}\n"
+                    f"经验年限: {profile.years_of_experience}\n"
+                    f"核心技能: {', '.join(profile.core_skills)}\n"
+                    f"亮点: {'; '.join(profile.highlight_achievements)}\n"
+                    f"弱点: {'; '.join(profile.weak_areas)}\n"
+                )
+
+        # 优先使用选定的 JD 文件
+        jd_context = ""
+        if self._selected_jd_path:
+            try:
+                jd_content = Path(self._selected_jd_path).read_text(encoding="utf-8", errors="replace")
+                jd_context = jd_content[:3000]
+            except Exception:
+                pass
+
+        # 回退到索引中的 JD
+        if not jd_context:
+            index = self.storage.get_index()
+            for jd_entry in index.get("jds", []):
+                try:
+                    jd_path = jd_entry.get("path", "")
+                    if jd_path:
+                        content = Path(jd_path).read_text(encoding="utf-8", errors="replace")
+                        jd_context += f"\n{content[:3000]}"
+                except Exception:
+                    continue
 
         prompt = self._load_prompt("interviewer.txt")
         prompt = prompt.replace("{company}", self.current_session.company)
         prompt = prompt.replace("{position}", self.current_session.position)
         prompt = prompt.replace("{industry}", "互联网/B端 SaaS")
         prompt = prompt.replace("{requirements}", jd_context[:1500] or "标准 B 端产品经理要求")
-        prompt = prompt.replace("{profile_summary}", profile_summary[:2000])
+        prompt = prompt.replace("{profile_summary}", profile_summary[:3000])
 
         return prompt
 

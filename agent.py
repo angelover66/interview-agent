@@ -40,7 +40,7 @@ from core.scheduler import register, get_skill, all_skills, parse_command, class
 from skills.material import MaterialSkill
 from skills.prep import PrepSkill
 from skills.mock import MockSkill
-from skills.tracker import TrackerSkill
+from skills.obsidian import ObsidianSkill
 
 console = Console()
 
@@ -68,16 +68,31 @@ class AgentApp:
     def __init__(self):
         self.storage = StorageManager(base_dir="./data")
 
-        # 初始化并注册 Skills
-        self.material = MaterialSkill(self.storage)
-        self.prep = PrepSkill(self.storage)
+        # 读取 Obsidian Vault 配置
+        import yaml
+        config_path = Path(__file__).parent / "config.yaml"
+        config = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
+        vault_path = config.get("obsidian", {}).get("vault_path", "")
+
+        # 初始化 Obsidian 连接器
+        obsidian_connector = None
+        if vault_path:
+            from connectors.obsidian import ObsidianConnector
+            obsidian_connector = ObsidianConnector(vault_path, self.storage)
+
+        # 初始化并注册 Skills（传入 obsidian 连接器）
+        self.material = MaterialSkill(self.storage, obsidian_connector)
+        self.prep = PrepSkill(self.storage, obsidian_connector)
         self.mock = MockSkill(self.storage)
-        self.tracker = TrackerSkill(self.storage)
+
+        if obsidian_connector:
+            self.obsidian = ObsidianSkill(vault_path, self.storage)
+            register("obsidian", self.obsidian)
 
         register("material", self.material)
         register("prep", self.prep)
         register("mock", self.mock)
-        register("tracker", self.tracker)
+        register("obsidian", self.obsidian)
 
         # 未完成的多轮上下文
         self._context: dict = {}

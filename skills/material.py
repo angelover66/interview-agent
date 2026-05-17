@@ -22,8 +22,9 @@ console = Console()
 class MaterialSkill:
     """素材库管理 Skill"""
 
-    def __init__(self, storage: StorageManager):
+    def __init__(self, storage: StorageManager, obsidian_connector=None):
         self.storage = storage
+        self.obsidian = obsidian_connector  # ObsidianConnector 实例（可选）
         self._prompt_cache = {}
 
     def _load_prompt(self, name: str) -> str:
@@ -45,6 +46,7 @@ class MaterialSkill:
             "list": self._cmd_list,
             "search": self._cmd_search,
             "profile": self._cmd_profile,
+            "delete": self._cmd_delete,
             "help": lambda: self._show_help,
         }.get(action)
         if not handler:
@@ -57,6 +59,7 @@ class MaterialSkill:
             "  material import <路径>    导入简历/项目文档/JD\n"
             "  material list             查看素材分类\n"
             "  material search <关键词>   搜索素材\n"
+            "  material delete <文件名>   删除素材\n"
             "  material profile          生成候选人画像\n"
             "  material help             显示此帮助",
             title="📂 material",
@@ -217,7 +220,6 @@ class MaterialSkill:
             try:
                 content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
                 if keyword.lower() in content.lower():
-                    # 找关键词上下文
                     idx = content.lower().index(keyword.lower())
                     start = max(0, idx - 60)
                     end = min(len(content), idx + len(keyword) + 120)
@@ -226,22 +228,44 @@ class MaterialSkill:
                         "file": f["name"],
                         "category": f["category"],
                         "context": context.strip()[:200],
+                        "source": "素材库",
                     })
             except Exception:
                 continue
 
-        if not results:
-            # 用 LLM 智能搜索
+        # 同步搜索 Obsidian Vault（如果已配置）
+        obsidian_results = []
+        if self.obsidian:
+            try:
+                vault_matches = self.obsidian.search(keyword, max_results=10)
+                for m in vault_matches:
+                    obsidian_results.append({
+                        "file": m["name"],
+                        "category": f"obsidian/{m.get('dir', '')}",
+                        "context": self.obsidian.read_file(m["path"], max_chars=200) or "",
+                        "source": "Obsidian",
+                    })
+            except Exception:
+                pass
+
+        # 合并结果
+        all_results = results + obsidian_results
+
+        if not all_results:
             console.print("[dim]未找到精确匹配，尝试语义搜索...[/dim]")
             return self._semantic_search(keyword, files)
 
-        table = Table(title=f"'{keyword}' 搜索结果 ({len(results)} 条)", box=box.SIMPLE)
+        table = Table(title=f"'{keyword}' 搜索结果 ({len(all_results)} 条)", box=box.SIMPLE)
         table.add_column("文件", style="cyan")
+        table.add_column("来源", style="magenta")
         table.add_column("分类", style="green")
         table.add_column("上下文")
-        for r in results[:10]:
-            table.add_row(r["file"], r["category"], r["context"][:80] + "...")
+        for r in all_results[:15]:
+            table.add_row(r["file"], r.get("source", "素材库"), r["category"], r["context"][:80] + "...")
         console.print(table)
+
+        if obsidian_results:
+            console.print("[dim]💡 使用 obsidian import <序号> 可将 Obsidian 文件导入素材库[/dim]")
         return ""
 
     def _semantic_search(self, keyword: str, files: list[dict]) -> str:
@@ -338,3 +362,35 @@ class MaterialSkill:
         """.strip(), title="📋 候选人画像", border_style="cyan"))
 
         return ""
+
+    # ─── delete ──────────────────────────────────────────
+
+    def _cmd_delete(self, args: str = "") -> str:
+        """删除素材文件并从索引中移除。"""
+        filename = args.strip()
+        if not filename:
+            return "[red]请指定要删除的文件名，如: material delete 我的简历.txt[/red]"
+
+        files = self.storage.list_raw_files()
+        target = None
+        for f in files:
+            if f["name"] == filename:
+                target = f
+                break
+
+        if not target:
+            return f"[red]未找到文件: {filename}[/red]"
+
+        # 删除物理文件
+        file_path = Path(target["path"])
+        if file_path.exists():
+            file_path.unlink()
+
+        # 从索引中移除
+        index = self.storage.get_index()
+        for key in ["resumes", "projects", "jds"]:
+            entries = index.get(key, [])
+            index[key] = [e for e in entries if e.get("file") != filename]
+        self.storage.save_index(index)
+
+        return f"[green]✓ 已删除: {filename}[/green]"

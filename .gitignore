@@ -26,5 +26,8 @@ Thumbs.db
 # Data (local only — demo data is committed)
 # data/ is committed as demo seed data
 
+# Obsidian cache (contains private vault structure)
+data/obsidian_cache/
+
 # Logs
 *.log

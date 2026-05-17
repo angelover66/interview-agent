@@ -13,6 +13,9 @@ search:
   provider: "tavily"         # tavily | serpapi | none
   api_key: ""
 
+obsidian:
+  vault_path: "/Users/lulu/Desktop/PM工作相关"  # 你的 Obsidian Vault 路径
+
 mock:
   max_questions: 10
   question_timeout_minutes: 5

@@ -11,6 +11,7 @@ from datetime import datetime
 # Ensure project root is on path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import yaml
 import streamlit as st
 
 # Load secrets into environment (for Streamlit Cloud deployment)
@@ -26,17 +27,16 @@ from rich.console import Console
 
 from core.storage import StorageManager
 from core.llm import chat, chat_json
-from core.models import MockSession, MockQuestion, MockAnswer, InterviewRecord
+from core.models import MockSession, MockQuestion, MockAnswer
 from skills.material import MaterialSkill
 from skills.prep import PrepSkill
 from skills.mock import MockSkill
-from skills.tracker import TrackerSkill
+from connectors.obsidian import ObsidianConnector
 
 # Import skill modules for console capture
 import skills.material as material_module
 import skills.prep as prep_module
 import skills.mock as mock_module
-import skills.tracker as tracker_module
 
 from web.ui import rich_to_html, rich_to_text
 
@@ -67,11 +67,22 @@ def init_session():
     """Initialize or restore session state."""
     if "storage" not in st.session_state:
         st.session_state.storage = StorageManager(base_dir="./data")
-        st.session_state.material = MaterialSkill(st.session_state.storage)
-        st.session_state.prep = PrepSkill(st.session_state.storage)
-        st.session_state.mock = MockSkill(st.session_state.storage)
-        st.session_state.tracker = TrackerSkill(st.session_state.storage)
 
+        # 读取 Obsidian 配置
+        config_path = Path(__file__).parent.parent / "config.yaml"
+        config = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
+        vault_path = config.get("obsidian", {}).get("vault_path", "")
+
+        obsidian_connector = None
+        if vault_path and Path(vault_path).exists():
+            obsidian_connector = ObsidianConnector(vault_path, st.session_state.storage)
+
+        st.session_state.obsidian_connector = obsidian_connector
+        st.session_state.vault_path = vault_path
+
+        st.session_state.material = MaterialSkill(st.session_state.storage, obsidian_connector)
+        st.session_state.prep = PrepSkill(st.session_state.storage, obsidian_connector)
+        st.session_state.mock = MockSkill(st.session_state.storage)
         # Mock interview state
         st.session_state.mock_active = False
         st.session_state.mock_chat_history = []
@@ -124,7 +135,7 @@ def display_rich_text(text: str):
 def page_material():
     st.header("📂 素材库管理")
 
-    tab1, tab2, tab3 = st.tabs(["导入素材", "素材列表", "候选人画像"])
+    tab1, tab2, tab3, tab4 = st.tabs(["导入素材", "素材列表", "候选人画像", "Obsidian"])
 
     # ── Tab 1: 导入 ──
     with tab1:
@@ -135,16 +146,16 @@ def page_material():
             key="material_uploader",
         )
         if uploaded:
-            # Save to temp file
-            suffix = Path(uploaded.name).suffix or ".txt"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(uploaded.read())
-                tmp_path = tmp.name
+            # Save to temp dir preserving original filename
+            upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
+            upload_dir.mkdir(exist_ok=True)
+            tmp_path = upload_dir / uploaded.name
+            tmp_path.write_bytes(uploaded.read())
 
             with st.spinner("正在提取结构化信息..."):
-                output = capture_output(material_module, st.session_state.material, "import", tmp_path)
+                output = capture_output(material_module, st.session_state.material, "import", str(tmp_path))
 
-            os.unlink(tmp_path)
+            tmp_path.unlink(missing_ok=True)
             display_rich_text(output)
             st.success("素材已入库")
 
@@ -152,35 +163,57 @@ def page_material():
     with tab2:
         st.subheader("素材列表")
 
-        # Build list from storage directly
         files = st.session_state.storage.list_raw_files()
         index = st.session_state.storage.get_index()
 
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if files:
-                for f in files:
-                    cat_emoji = {"resumes": "📄", "projects": "📁", "jds": "🎯"}.get(f["category"], "📎")
-                    st.markdown(f"{cat_emoji} **{f['name']}** ({f['size']//1024}KB) — *{f['category']}*")
-            else:
-                st.info("素材库为空，请先导入素材")
-
-        with col2:
+        if not files:
+            st.info("素材库为空，请先导入素材")
+        else:
+            # Search box
             keyword = st.text_input("搜索素材", key="material_search")
+
+            display_files = files
             if keyword:
-                results = []
+                display_files = []
                 for f in files:
                     try:
                         content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
                         if keyword.lower() in content.lower():
-                            results.append(f)
+                            display_files.append(f)
                     except Exception:
                         continue
-                if results:
-                    for r in results:
-                        st.markdown(f"📎 **{r['name']}**")
-                elif keyword:
+                if not display_files:
                     st.caption("无精确匹配")
+
+            for f in display_files:
+                cat_emoji = {"resumes": "📄", "projects": "📁", "jds": "🎯"}.get(f["category"], "📎")
+                col_a, col_b, col_c = st.columns([4, 1, 1])
+                with col_a:
+                    st.markdown(f"{cat_emoji} **{f['name']}** ({f['size']//1024}KB) — *{f['category']}*")
+                with col_b:
+                    # View content button
+                    view_key = f"view_{f['path']}"
+                    if st.button("📖 查看", key=view_key):
+                        try:
+                            content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
+                            st.session_state[f"viewing_{view_key}"] = not st.session_state.get(f"viewing_{view_key}", False)
+                        except Exception:
+                            st.error("无法读取文件")
+                with col_c:
+                    # Delete button
+                    del_key = f"del_{f['name']}"
+                    if st.button("🗑 删除", key=del_key):
+                        st.session_state.material.run("delete", f["name"])
+                        st.rerun()
+
+                # Show content if toggled
+                if st.session_state.get(f"viewing_{view_key}", False):
+                    try:
+                        content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
+                        with st.expander("文件内容", expanded=True):
+                            st.text(content[:5000])
+                    except Exception:
+                        st.error("无法读取文件")
 
     # ── Tab 3: 画像 ──
     with tab3:
@@ -225,6 +258,60 @@ def page_material():
                 output = capture_output(material_module, st.session_state.material, "profile", "")
             display_rich_text(output)
             st.rerun()
+
+    # ── Tab 4: Obsidian ──
+    with tab4:
+        st.subheader("📒 Obsidian 知识库")
+
+        vault_path = st.session_state.get("vault_path", "")
+        if not vault_path:
+            st.warning("未配置 Obsidian Vault 路径，请在 config.yaml 中设置 obsidian.vault_path")
+        elif not Path(vault_path).exists():
+            st.error(f"Vault 路径不存在: {vault_path}")
+        else:
+            obs = st.session_state.get("obsidian_connector")
+            if obs:
+                st.success(f"已连接: {vault_path}")
+
+                # Search
+                obs_keyword = st.text_input("搜索 Obsidian", key="obsidian_search_input")
+                if obs_keyword:
+                    results = obs.search(obs_keyword, max_results=15)
+                    if results:
+                        st.caption(f"找到 {len(results)} 个文件")
+                        for i, f in enumerate(results, 1):
+                            col_a, col_b = st.columns([4, 1])
+                            ext_icon = {".md": "📝", ".pdf": "📄", ".csv": "📊"}.get(f["ext"], "📎")
+                            with col_a:
+                                st.markdown(f"{i}. {ext_icon} **{f['name']}** — *{f['dir']}*")
+                            with col_b:
+                                if st.button("📥 导入", key=f"obs_import_{i}"):
+                                    result = obs.import_to_material(f["path"])
+                                    st.success(f"已导入: {f['name']}")
+                                    st.rerun()
+                            # Preview
+                            with st.expander(f"预览: {f['name']}"):
+                                content = obs.read_file(f["path"], max_chars=3000)
+                                if content:
+                                    st.text(content[:3000])
+                    else:
+                        st.info("未找到匹配文件")
+
+                # Vault stats
+                with st.expander("📊 Vault 目录结构"):
+                    try:
+                        files = obs._scan()
+                        st.caption(f"共 {len(files)} 个可索引文件")
+                        dirs = {}
+                        for f in files:
+                            d = f["dir"] or "(根目录)"
+                            dirs[d] = dirs.get(d, 0) + 1
+                        for d, count in sorted(dirs.items()):
+                            st.markdown(f"- {d}: {count} 个文件")
+                    except Exception as e:
+                        st.error(f"扫描失败: {e}")
+            else:
+                st.warning("Obsidian 连接器未初始化")
 
 
 # ─── Page: 面试准备 ────────────────────────────────────────
@@ -336,25 +423,59 @@ def page_mock():
     if not st.session_state.mock_started:
         st.markdown("#### 开始一场模拟面试")
 
+        # 从素材库获取可用的简历和 JD
+        index = st.session_state.storage.get_index()
+        resumes = index.get("resumes", [])
+        jds = index.get("jds", [])
+
         col1, col2 = st.columns(2)
         with col1:
-            company = st.text_input("公司名称", placeholder="如: 字节跳动", key="mock_company")
+            if resumes:
+                resume_names = [r.get("file", r.get("title", "")) for r in resumes]
+                selected_resume = st.selectbox("选择简历", resume_names, key="mock_resume_select")
+            else:
+                st.warning("素材库中没有简历，请先在素材库上传简历")
+                selected_resume = None
+
         with col2:
-            position = st.text_input("岗位名称", placeholder="如: 资深B端产品经理", key="mock_position")
+            if jds:
+                jd_names = [j.get("file", j.get("title", "")) for j in jds]
+                selected_jd = st.selectbox("选择目标岗位 JD", jd_names, key="mock_jd_select")
+            else:
+                st.warning("素材库中没有 JD，请先在素材库上传 JD")
+                selected_jd = None
 
-        if st.button("🎬 开始面试", type="primary", use_container_width=True, disabled=not (company and position)):
-            with st.spinner("面试官正在准备..."):
+        can_start = selected_resume and selected_jd
+
+        if st.button("🎬 开始面试", type="primary", use_container_width=True, disabled=not can_start):
+            # 读取选中文件和提取信息
+            resume_entry = next((r for r in resumes if r.get("file") == selected_resume), None)
+            jd_entry = next((j for j in jds if j.get("file") == selected_jd), None)
+
+            if resume_entry and jd_entry:
+                jd_path = jd_entry.get("path", "")
+                jd_title = jd_entry.get("title", "")
+                # 从 JD 标题拆分公司/岗位
+                title_parts = jd_title.split(maxsplit=1)
+                jd_company = title_parts[0] if title_parts else ""
+                jd_position = title_parts[1] if len(title_parts) > 1 else jd_title
+
+                # 将选中文件的路径存储到 mock skill 中
                 mock = st.session_state.mock
-                output = capture_output(mock_module, mock, "start", f"{company} {position}")
+                mock._selected_resume_path = resume_entry.get("path", "")
+                mock._selected_jd_path = jd_path
 
-            cleaned = re.sub(r'[╭╮╰╯│├└┬┴┼═─━]', '', output).strip()
+                with st.spinner("面试官正在准备..."):
+                    output = capture_output(mock_module, mock, "start", f"{jd_company} {jd_position}")
 
-            st.session_state.mock_chat_history = [
-                {"role": "assistant", "content": cleaned or output}
-            ]
-            st.session_state.mock_started = True
-            st.session_state.mock_active = True
-            st.rerun()
+                cleaned = re.sub(r'[╭╮╰╯│├└┬┴┼═─━]', '', output).strip()
+
+                st.session_state.mock_chat_history = [
+                    {"role": "assistant", "content": cleaned or output}
+                ]
+                st.session_state.mock_started = True
+                st.session_state.mock_active = True
+                st.rerun()
 
         # Previous sessions
         with st.expander("📋 历史模拟面试"):
@@ -442,168 +563,6 @@ def page_mock():
         st.rerun()
 
 
-# ─── Page: 面试追踪 ────────────────────────────────────────
-
-def page_tracker():
-    st.header("📊 面试追踪")
-
-    tab1, tab2, tab3 = st.tabs(["面试记录", "添加记录", "统计看板"])
-
-    # ── Tab 1: 记录列表 ──
-    with tab1:
-        records = st.session_state.storage.load_interviews()
-        if not records:
-            st.info("暂无面试记录，请先添加")
-        else:
-            # Build a nice table
-            rows = []
-            for r in records:
-                status_emoji = {"待面试": "⏳", "已面试": "✅", "有结果": "📋"}.get(r.get("status", ""), "❓")
-                result_emoji = {"通过": "🟢", "offer": "🎉", "挂": "🔴", "待定": "🟡"}.get(r.get("result", ""), "⚪")
-                rows.append({
-                    "ID": r.get("id", ""),
-                    "公司": r.get("company", ""),
-                    "岗位": r.get("position", ""),
-                    "轮次": r.get("round", ""),
-                    "状态": f"{status_emoji} {r.get('status', '')}",
-                    "结果": f"{result_emoji} {r.get('result', '')}",
-                    "日期": r.get("interview_date", ""),
-                })
-
-            st.dataframe(rows, use_container_width=True, hide_index=True)
-
-            # Detail expander
-            with st.expander("查看详情 / 更新记录"):
-                record_ids = [str(r.get("id")) for r in records]
-                selected_id = st.selectbox("选择记录 ID", record_ids)
-                if selected_id:
-                    target = next((r for r in records if str(r.get("id")) == selected_id), None)
-                    if target:
-                        st.json(target)
-
-                        st.markdown("---")
-                        st.caption("更新记录")
-                        new_status = st.selectbox("状态", ["待面试", "已面试", "有结果"],
-                                                  index=["待面试", "已面试", "有结果"].index(target.get("status", "待面试")))
-                        new_result = st.selectbox("结果", ["", "通过", "挂", "待定", "offer"],
-                                                  index=["", "通过", "挂", "待定", "offer"].index(target.get("result", "")))
-                        new_exp = st.text_area("面经", value=target.get("experience", ""))
-                        new_notes = st.text_input("备注", value=target.get("notes", ""))
-
-                        if st.button("保存更新"):
-                            target["status"] = new_status
-                            target["result"] = new_result
-                            target["experience"] = new_exp
-                            target["notes"] = new_notes
-                            target["updated_at"] = datetime.now().isoformat()
-                            st.session_state.storage.save_interviews(records)
-                            st.success("已更新")
-                            st.rerun()
-
-    # ── Tab 2: 添加记录 ──
-    with tab2:
-        st.subheader("添加面试记录")
-        with st.form("add_record_form"):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                company = st.text_input("公司", placeholder="如: 字节跳动")
-                position = st.text_input("岗位", placeholder="如: 资深B端产品经理")
-                interview_date = st.date_input("面试日期")
-            with col_b:
-                round_name = st.selectbox("轮次", ["一面", "二面", "三面", "HR面", "终面"])
-                status = st.selectbox("状态", ["待面试", "已面试", "有结果"])
-                result = st.selectbox("结果", ["", "通过", "挂", "待定", "offer"])
-
-            experience = st.text_area("面经记录", placeholder="记录面试问题和心得...")
-            notes = st.text_input("备注")
-
-            submitted = st.form_submit_button("保存记录", use_container_width=True)
-            if submitted:
-                if not company or not position:
-                    st.error("公司和岗位为必填项")
-                else:
-                    records = st.session_state.storage.load_interviews()
-                    record = InterviewRecord(
-                        company=company,
-                        position=position,
-                        interview_date=str(interview_date),
-                        round=round_name,
-                        status=status,
-                        result=result,
-                        experience=experience,
-                        notes=notes,
-                        created_at=datetime.now().isoformat(),
-                        updated_at=datetime.now().isoformat(),
-                    )
-                    record_id = len(records) + 1
-                    entry = {"id": record_id, **record.to_dict()}
-                    records.append(entry)
-                    st.session_state.storage.save_interviews(records)
-                    st.success(f"记录 #{record_id} 已保存")
-                    st.rerun()
-
-    # ── Tab 3: 统计看板 ──
-    with tab3:
-        records = st.session_state.storage.load_interviews()
-        if not records:
-            st.info("暂无数据")
-            return
-
-        total = len(records)
-        pending = sum(1 for r in records if r.get("status") == "待面试")
-        interviewed = sum(1 for r in records if r.get("status") in ("已面试", "有结果"))
-        passed = sum(1 for r in records if r.get("result") in ("通过", "offer"))
-        failed = sum(1 for r in records if r.get("result") == "挂")
-
-        # Metrics row
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("总投递", total)
-        c2.metric("待面试", pending)
-        c3.metric("已完成", interviewed)
-        c4.metric("通过/Offer", passed)
-        c5.metric("已挂", failed, delta=None)
-
-        st.markdown("---")
-
-        # Conversion rate
-        col_a, col_b = st.columns(2)
-        with col_a:
-            pass_rate = (passed / (passed + failed) * 100) if (passed + failed) > 0 else 0
-            st.metric("通过率", f"{pass_rate:.0f}%")
-
-            # Round distribution
-            rounds = {}
-            for r in records:
-                rnd = r.get("round", "未知")
-                rounds[rnd] = rounds.get(rnd, 0) + 1
-            st.markdown("**轮次分布**")
-            for k, v in sorted(rounds.items()):
-                st.markdown(f"- {k}: {v} 次")
-
-        with col_b:
-            interview_rate = (interviewed / total * 100) if total > 0 else 0
-            st.metric("面试转化率", f"{interview_rate:.0f}%")
-
-            # Company distribution
-            companies = {}
-            for r in records:
-                c = r.get("company", "未知")
-                companies[c] = companies.get(c, 0) + 1
-            st.markdown("**投递公司**")
-            for c_name, count in sorted(companies.items(), key=lambda x: -x[1]):
-                st.markdown(f"- {c_name}: {count} 次")
-
-        # Status chart using st.bar_chart
-        st.markdown("---")
-        st.markdown("**状态分布**")
-        status_data = {
-            "待面试": pending,
-            "已面试": sum(1 for r in records if r.get("status") == "已面试"),
-            "有结果": sum(1 for r in records if r.get("status") == "有结果"),
-        }
-        st.bar_chart(status_data)
-
-
 # ─── Sidebar ──────────────────────────────────────────────
 
 def sidebar():
@@ -616,7 +575,6 @@ def sidebar():
             "📖 面试准备": "面试准备",
             "🎯 模拟面试": "模拟面试",
             "📂 素材库": "素材库",
-            "📊 面试追踪": "面试追踪",
         }
 
         current_label = next((k for k, v in pages.items() if v == st.session_state.page), "📖 面试准备")
@@ -630,11 +588,6 @@ def sidebar():
         st.session_state.page = pages[selected_label]
 
         st.markdown("---")
-
-        # Quick stats
-        records = st.session_state.storage.load_interviews()
-        pending = sum(1 for r in records if r.get("status") == "待面试")
-        st.metric("待面试", pending)
 
         profile = st.session_state.storage.load_profile()
         if profile:
@@ -656,7 +609,6 @@ def main():
         "素材库": page_material,
         "面试准备": page_prep,
         "模拟面试": page_mock,
-        "面试追踪": page_tracker,
     }
 
     page_fn = page_map.get(st.session_state.page, page_prep)
