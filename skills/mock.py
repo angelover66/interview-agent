@@ -21,7 +21,7 @@ console = Console()
 
 
 def _read_file_content(path: str) -> str:
-    """读取文件内容，支持文本、PDF（pdfminer）和 Excel（openpyxl）。"""
+    """读取文件内容，支持文本、PDF（pdfminer）、Excel（openpyxl）和图片（Pillow 元数据）。"""
     ext = os.path.splitext(path)[1].lower()
     if ext in {".xlsx", ".xls"}:
         try:
@@ -48,6 +48,15 @@ def _read_file_content(path: str) -> str:
             return extract_text(path)
         except Exception:
             return ""
+    elif ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+        # 图片文件：DeepSeek 不支持多模态，无法提取文字
+        # 返回提示信息，面试官将基于画像或通用模式进行面试
+        try:
+            from PIL import Image
+            img = Image.open(path)
+            return f"[图片素材] {os.path.basename(path)} ({img.width}x{img.height}, {img.mode})\n注意：当前模型不支持从图片提取文字，面试官将基于候选人画像进行提问。"
+        except Exception:
+            return f"[图片素材] {os.path.basename(path)}\n注意：当前模型不支持从图片提取文字。"
     else:
         try:
             return Path(path).read_text(encoding="utf-8", errors="replace")
