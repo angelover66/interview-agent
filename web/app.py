@@ -456,8 +456,8 @@ def page_mock():
                 st.warning("素材库中没有简历，请先到素材库上传，或切换到「上传本地文件」")
         else:
             uploaded_resume = st.file_uploader(
-                "上传简历（支持 .txt / .md / .pdf / .docx）",
-                type=["txt", "md", "pdf", "docx"],
+                "上传简历（支持 .txt / .md / .pdf / .xlsx / .png / .jpg / .webp）",
+                type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"],
                 key="mock_resume_uploader",
             )
             if uploaded_resume:
@@ -489,8 +489,8 @@ def page_mock():
                 st.warning("素材库中没有 JD，请先到素材库上传，或切换到「上传本地文件」")
         else:
             uploaded_jd = st.file_uploader(
-                "上传 JD（支持 .txt / .md / .pdf / .docx）",
-                type=["txt", "md", "pdf", "docx"],
+                "上传 JD（支持 .txt / .md / .pdf / .xlsx / .png / .jpg / .webp）",
+                type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"],
                 key="mock_jd_uploader",
             )
             if uploaded_jd:
