@@ -156,11 +156,15 @@ def page_material():
             tmp_path = upload_dir / uploaded.name
             tmp_path.write_bytes(uploaded.read())
 
-            with st.spinner("正在提取结构化信息..."):
-                output = capture_output(material_module, st.session_state.material, "import", str(tmp_path))
+            with st.spinner("正在上传并提取信息（可能需要 10-30 秒）..."):
+                try:
+                    output = capture_output(material_module, st.session_state.material, "import", str(tmp_path))
+                except Exception:
+                    output = None
 
             tmp_path.unlink(missing_ok=True)
-            display_rich_text(output)
+            if output:
+                display_rich_text(output)
             st.success("素材已入库")
 
     # ── Tab 2: 列表 ──

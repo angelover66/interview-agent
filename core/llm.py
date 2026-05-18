@@ -142,7 +142,7 @@ def _chat_openai_compat(
 
     url = f"{base_url.rstrip('/')}/v1/chat/completions"
 
-    with httpx.Client(timeout=120.0) as client:
+    with httpx.Client(timeout=180.0) as client:
         resp = client.post(
             url,
             headers={

@@ -111,6 +111,7 @@ class MaterialSkill:
         return "\n".join(parts)
 
     def _cmd_import(self, args: str) -> str:
+        """导入文件：先秒存，再异步 LLM 提取。LLM 失败不影响入库。"""
         path = args.strip().strip('"').strip("'")
         if not path or not os.path.exists(path):
             return f"[red]文件不存在: {path}[/red]"
@@ -121,16 +122,17 @@ class MaterialSkill:
         if not target:
             return "[red]文件复制失败[/red]"
 
+        filename = os.path.basename(target)
         ext = os.path.splitext(path)[1].lower()
 
         # ── 图片文件：仅存储，不做 LLM 提取 ──
         if file_type == "image" or ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
             index = self.storage.get_index()
             entry = {
-                "file": os.path.basename(target),
+                "file": filename,
                 "path": target,
                 "type": "image",
-                "title": os.path.basename(target),
+                "title": filename,
                 "imported_at": datetime.now().isoformat(),
             }
             index.get("images", []).append(entry)
@@ -147,7 +149,20 @@ class MaterialSkill:
         else:
             content = Path(path).read_text(encoding="utf-8", errors="replace")[:15000]
 
-        # 调用 LLM 提取结构（Excel和文本文件）
+        # 先以基础元数据入库（LLM 失败前已保障文件不丢失）
+        index = self.storage.get_index()
+        base_entry = {
+            "file": filename,
+            "path": target,
+            "type": file_type,
+            "title": filename,
+            "imported_at": datetime.now().isoformat(),
+        }
+        key_map = {"resume": "resumes", "project": "projects", "jd": "jds"}
+        index.get(key_map.get(file_type, "projects"), []).append(base_entry)
+        self.storage.save_index(index)
+
+        # 调用 LLM 提取结构（可选步骤，失败不影响已入库文件）
         prompt = self._load_prompt("material_extract.txt")
         llm_type_label = "Excel数据" if ext in {".xlsx", ".xls"} else ("简历" if file_type == "resume" else "项目文档" if file_type == "project" else "JD")
         try:
@@ -155,25 +170,28 @@ class MaterialSkill:
                 {"role": "user", "content": f"请提取以下{llm_type_label}信息：\n\n{content}"}
             ])
         except Exception as e:
-            return f"[red]LLM 提取失败: {e}[/red]\n文件已保存到素材库，但未能自动提取结构化信息。"
+            return (
+                f"[green]✓ 文件已入库: {filename}[/green]\n"
+                f"[bold]类别:[/bold] {file_type}\n\n"
+                f"[yellow]⚠ LLM 提取超时，文件已保存但未提取结构化信息。[/yellow]\n"
+                f"[dim]可在素材列表查看文件内容，或使用 material extract {filename} 重新提取[/dim]"
+            )
 
-        # 更新索引
+        # LLM 提取成功：更新索引条目
+        result_data = result.get("data", {})
         index = self.storage.get_index()
-        entry = {
-            "file": os.path.basename(target),
-            "path": target,
-            "type": result.get("type", file_type),
-            "title": self._get_title(result.get("data", {})),
-            "imported_at": datetime.now().isoformat(),
-        }
-        key_map = {"resume": "resumes", "project": "projects", "jd": "jds"}
-        index.get(key_map.get(file_type, "projects"), []).append(entry)
+        for key in ["resumes", "projects", "jds"]:
+            entries = index.get(key, [])
+            for e in entries:
+                if e.get("file") == filename:
+                    e["type"] = result.get("type", file_type)
+                    e["title"] = self._get_title(result_data)
+                    break
         self.storage.save_index(index)
 
-        data = result.get("data", {})
-        summary = self._format_extract_result(file_type, data)
+        summary = self._format_extract_result(file_type, result_data)
         return (
-            f"[green]✓ 导入成功: {os.path.basename(target)}[/green]\n"
+            f"[green]✓ 导入成功: {filename}[/green]\n"
             f"[bold]类别:[/bold] {file_type}\n\n"
             f"{summary}\n\n"
             f"[dim]素材已入库，输入 material list 查看[/dim]"

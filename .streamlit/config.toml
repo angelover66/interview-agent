@@ -1,0 +1,11 @@
+[server]
+# 增加上传和 websocket 超时时间，避免大文件上传时 AxiosError
+maxUploadSize = 50
+maxMessageSize = 200
+# 浏览器 websocket 超时 (ms)，默认 200ms 太短
+runner.fastReruns = false
+
+[browser]
+# 增加请求超时容忍度
+serverAddress = "localhost"
+gatherUsageStats = false
