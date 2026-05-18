@@ -145,8 +145,8 @@ def page_material():
     with tab1:
         st.subheader("导入素材")
         uploaded = st.file_uploader(
-            "上传简历 / 项目文档 / JD（支持 .txt / .md / .pdf）",
-            type=["txt", "md", "pdf"],
+            "上传简历 / 项目文档 / JD / 图片 / Excel（支持 .txt / .md / .pdf / .xlsx / .xls / .png / .jpg / .webp）",
+            type=["txt", "md", "pdf", "xlsx", "xls", "png", "jpg", "jpeg", "webp"],
             key="material_uploader",
         )
         if uploaded:
@@ -190,21 +190,17 @@ def page_material():
                     st.caption("无精确匹配")
 
             for f in display_files:
-                cat_emoji = {"resumes": "📄", "projects": "📁", "jds": "🎯"}.get(f["category"], "📎")
+                cat_emoji = {"resumes": "📄", "projects": "📁", "jds": "🎯", "images": "🖼️"}.get(f["category"], "📎")
+                is_image = f["category"] == "images" or f.get("name", "").lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif"))
                 col_a, col_b, col_c = st.columns([4, 1, 1])
                 with col_a:
                     st.markdown(f"{cat_emoji} **{f['name']}** ({f['size']//1024}KB) — *{f['category']}*")
                 with col_b:
-                    # View content button
                     view_key = f"view_{f['path']}"
-                    if st.button("📖 查看", key=view_key):
-                        try:
-                            content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
-                            st.session_state[f"viewing_{view_key}"] = not st.session_state.get(f"viewing_{view_key}", False)
-                        except Exception:
-                            st.error("无法读取文件")
+                    view_label = "🖼️ 预览" if is_image else "📖 查看"
+                    if st.button(view_label, key=view_key):
+                        st.session_state[f"viewing_{view_key}"] = not st.session_state.get(f"viewing_{view_key}", False)
                 with col_c:
-                    # Delete button
                     del_key = f"del_{f['name']}"
                     if st.button("🗑 删除", key=del_key):
                         st.session_state.material.run("delete", f["name"])
@@ -212,12 +208,19 @@ def page_material():
 
                 # Show content if toggled
                 if st.session_state.get(f"viewing_{view_key}", False):
-                    try:
-                        content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
-                        with st.expander("文件内容", expanded=True):
-                            st.text(content[:5000])
-                    except Exception:
-                        st.error("无法读取文件")
+                    if is_image:
+                        with st.expander("图片预览", expanded=True):
+                            try:
+                                st.image(f["path"], caption=f["name"], use_container_width=True)
+                            except Exception:
+                                st.error("无法加载图片")
+                    else:
+                        try:
+                            content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")
+                            with st.expander("文件内容", expanded=True):
+                                st.text(content[:5000])
+                        except Exception:
+                            st.error("无法读取文件")
 
     # ── Tab 3: 画像 ──
     with tab3:
@@ -432,41 +435,101 @@ def page_mock():
         resumes = index.get("resumes", [])
         jds = index.get("jds", [])
 
-        col1, col2 = st.columns(2)
-        with col1:
+        # ── 简历选择：素材库 or 本地上传 ──
+        st.markdown("##### 📄 选择简历")
+        resume_source = st.radio(
+            "简历来源",
+            ["从素材库选择", "上传本地文件"],
+            horizontal=True,
+            key="mock_resume_source",
+            label_visibility="collapsed",
+        )
+
+        selected_resume = None
+        resume_entry = None
+
+        if resume_source == "从素材库选择":
             if resumes:
                 resume_names = [r.get("file", r.get("title", "")) for r in resumes]
-                selected_resume = st.selectbox("选择简历", resume_names, key="mock_resume_select")
+                selected_resume = st.selectbox("素材库简历", resume_names, key="mock_resume_select")
             else:
-                st.warning("素材库中没有简历，请先在素材库上传简历")
-                selected_resume = None
+                st.warning("素材库中没有简历，请先到素材库上传，或切换到「上传本地文件」")
+        else:
+            uploaded_resume = st.file_uploader(
+                "上传简历（支持 .txt / .md / .pdf / .docx）",
+                type=["txt", "md", "pdf", "docx"],
+                key="mock_resume_uploader",
+            )
+            if uploaded_resume:
+                upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
+                upload_dir.mkdir(exist_ok=True)
+                resume_tmp = upload_dir / f"mock_resume_{uploaded_resume.name}"
+                resume_tmp.write_bytes(uploaded_resume.read())
+                selected_resume = uploaded_resume.name
+                resume_entry = {"file": uploaded_resume.name, "path": str(resume_tmp)}
 
-        with col2:
+        # ── JD 选择：素材库 or 本地上传 ──
+        st.markdown("##### 🎯 选择目标岗位 JD")
+        jd_source = st.radio(
+            "JD来源",
+            ["从素材库选择", "上传本地文件"],
+            horizontal=True,
+            key="mock_jd_source",
+            label_visibility="collapsed",
+        )
+
+        selected_jd = None
+        jd_entry = None
+
+        if jd_source == "从素材库选择":
             if jds:
                 jd_names = [j.get("file", j.get("title", "")) for j in jds]
-                selected_jd = st.selectbox("选择目标岗位 JD", jd_names, key="mock_jd_select")
+                selected_jd = st.selectbox("素材库 JD", jd_names, key="mock_jd_select")
             else:
-                st.warning("素材库中没有 JD，请先在素材库上传 JD")
-                selected_jd = None
+                st.warning("素材库中没有 JD，请先到素材库上传，或切换到「上传本地文件」")
+        else:
+            uploaded_jd = st.file_uploader(
+                "上传 JD（支持 .txt / .md / .pdf / .docx）",
+                type=["txt", "md", "pdf", "docx"],
+                key="mock_jd_uploader",
+            )
+            if uploaded_jd:
+                upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
+                upload_dir.mkdir(exist_ok=True)
+                jd_tmp = upload_dir / f"mock_jd_{uploaded_jd.name}"
+                jd_tmp.write_bytes(uploaded_jd.read())
+                selected_jd = uploaded_jd.name
+                jd_entry = {"file": uploaded_jd.name, "path": str(jd_tmp)}
 
         can_start = selected_resume and selected_jd
 
         if st.button("🎬 开始面试", type="primary", use_container_width=True, disabled=not can_start):
-            # 读取选中文件和提取信息
-            resume_entry = next((r for r in resumes if r.get("file") == selected_resume), None)
-            jd_entry = next((j for j in jds if j.get("file") == selected_jd), None)
+            # 解析简历来源
+            if resume_source == "从素材库选择":
+                resume_entry = next((r for r in resumes if r.get("file") == selected_resume), None)
+
+            # 解析 JD 来源
+            if jd_source == "从素材库选择":
+                jd_entry = next((j for j in jds if j.get("file") == selected_jd), None)
 
             if resume_entry and jd_entry:
+                resume_path = resume_entry.get("path", "")
                 jd_path = jd_entry.get("path", "")
-                jd_title = jd_entry.get("title", "")
-                # 从 JD 标题拆分公司/岗位
-                title_parts = jd_title.split(maxsplit=1)
-                jd_company = title_parts[0] if title_parts else ""
-                jd_position = title_parts[1] if len(title_parts) > 1 else jd_title
 
-                # 将选中文件的路径存储到 mock skill 中
+                # 确定公司/岗位名称
+                if jd_source == "从素材库选择":
+                    jd_title = jd_entry.get("title", "")
+                    title_parts = jd_title.split(maxsplit=1)
+                    jd_company = title_parts[0] if title_parts else ""
+                    jd_position = title_parts[1] if len(title_parts) > 1 else jd_title
+                else:
+                    # 本地上传的 JD，用文件名作为标识
+                    jd_name = os.path.splitext(selected_jd)[0]
+                    jd_company = jd_name
+                    jd_position = jd_name
+
                 mock = st.session_state.mock
-                mock._selected_resume_path = resume_entry.get("path", "")
+                mock._selected_resume_path = resume_path
                 mock._selected_jd_path = jd_path
 
                 with st.spinner("面试官正在准备..."):

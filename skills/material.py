@@ -70,11 +70,45 @@ class MaterialSkill:
 
     def _detect_file_type(self, filename: str) -> str:
         name = filename.lower()
+        ext = os.path.splitext(name)[1].lower()
+        # 图片类型
+        if ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+            if any(k in name for k in ["简历", "resume", "cv"]):
+                return "resume"
+            return "image"
+        # Excel 类型
+        if ext in {".xlsx", ".xls"}:
+            return "project"
         if any(k in name for k in ["简历", "resume", "cv"]):
             return "resume"
         if any(k in name for k in ["jd", "岗位", "职位描述", "招聘"]):
             return "jd"
         return "project"
+
+    def _read_excel_content(self, path: str) -> str:
+        """读取 Excel 文件内容，转为 Markdown 表格文本。"""
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            return "[错误] 需要安装 openpyxl 库: pip install openpyxl"
+
+        wb = load_workbook(path, data_only=True, read_only=True)
+        parts = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            parts.append(f"## Sheet: {sheet_name}")
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                parts.append("(空表)")
+                continue
+            rows = rows[:100]
+            for i, row in enumerate(rows):
+                cells = [str(c) if c is not None else "" for c in row[:20]]
+                parts.append("| " + " | ".join(cells) + " |")
+                if i == 0:
+                    parts.append("|" + "|".join(["---"] * len(cells)) + "|")
+        wb.close()
+        return "\n".join(parts)
 
     def _cmd_import(self, args: str) -> str:
         path = args.strip().strip('"').strip("'")
@@ -87,14 +121,38 @@ class MaterialSkill:
         if not target:
             return "[red]文件复制失败[/red]"
 
-        # 读取内容
-        content = Path(path).read_text(encoding="utf-8", errors="replace")[:15000]
+        ext = os.path.splitext(path)[1].lower()
 
-        # 调用 LLM 提取结构
+        # ── 图片文件：仅存储，不做 LLM 提取 ──
+        if file_type == "image" or ext in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+            index = self.storage.get_index()
+            entry = {
+                "file": os.path.basename(target),
+                "path": target,
+                "type": "image",
+                "title": os.path.basename(target),
+                "imported_at": datetime.now().isoformat(),
+            }
+            index.get("images", []).append(entry)
+            self.storage.save_index(index)
+            return (
+                f"[green]图片已导入: {os.path.basename(target)}[/green]\n"
+                f"[bold]类别:[/bold] image\n\n"
+                f"[dim]图片已存入素材库，可在素材列表中查看。[/dim]"
+            )
+
+        # ── Excel 文件：openpyxl 读取后送 LLM 提取 ──
+        if ext in {".xlsx", ".xls"}:
+            content = self._read_excel_content(path)
+        else:
+            content = Path(path).read_text(encoding="utf-8", errors="replace")[:15000]
+
+        # 调用 LLM 提取结构（Excel和文本文件）
         prompt = self._load_prompt("material_extract.txt")
+        llm_type_label = "Excel数据" if ext in {".xlsx", ".xls"} else ("简历" if file_type == "resume" else "项目文档" if file_type == "project" else "JD")
         try:
             result = chat_json(system=prompt, messages=[
-                {"role": "user", "content": f"请提取以下{'简历' if file_type=='resume' else '项目文档' if file_type=='project' else 'JD'}信息：\n\n{content}"}
+                {"role": "user", "content": f"请提取以下{llm_type_label}信息：\n\n{content}"}
             ])
         except Exception as e:
             return f"[red]LLM 提取失败: {e}[/red]\n文件已保存到素材库，但未能自动提取结构化信息。"
@@ -125,6 +183,8 @@ class MaterialSkill:
         return data.get("name") or data.get("company", "") + " " + data.get("position", "") or data.get("title", "")
 
     def _format_extract_result(self, file_type: str, data: dict) -> str:
+        if file_type == "image":
+            return "[dim]图片素材，不支持文本提取[/dim]"
         if file_type == "resume":
             parts = []
             if data.get("name"): parts.append(f"[bold]姓名:[/bold] {data['name']}")
@@ -188,6 +248,13 @@ class MaterialSkill:
             for f in jds:
                 j_tree.add(f"{f['name']}  [dim]{f['size']//1024}KB[/dim]")
 
+        # 图片
+        images = [f for f in files if f["category"] == "images"]
+        if images:
+            i_tree = tree.add(f"[bold]🖼️ 图片 ({len(images)})[/bold]")
+            for f in images:
+                i_tree.add(f"{f['name']}  [dim]{f['size']//1024}KB[/dim]")
+
         # 笔记
         notes = self.storage.list_notes()
         if notes:
@@ -202,7 +269,7 @@ class MaterialSkill:
 
         console.print(tree)
 
-        if not any([resumes, projects, jds, notes, profile]):
+        if not any([resumes, projects, jds, images, notes, profile]):
             return "[dim]素材库为空。使用 material import <路径> 导入素材。[/dim]"
         return ""
 
@@ -388,7 +455,7 @@ class MaterialSkill:
 
         # 从索引中移除
         index = self.storage.get_index()
-        for key in ["resumes", "projects", "jds"]:
+        for key in ["resumes", "projects", "jds", "images"]:
             entries = index.get(key, [])
             index[key] = [e for e in entries if e.get("file") != filename]
         self.storage.save_index(index)

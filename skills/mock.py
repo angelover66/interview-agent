@@ -1,5 +1,6 @@
 """Skill: 模拟面试 — 角色扮演、逐题问答、评估反馈"""
 from __future__ import annotations
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,41 @@ from core.storage import StorageManager
 from core.models import MockSession, MockQuestion, MockAnswer
 
 console = Console()
+
+
+def _read_file_content(path: str) -> str:
+    """读取文件内容，支持文本、PDF（pdfminer）和 Excel（openpyxl）。"""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in {".xlsx", ".xls"}:
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(path, data_only=True, read_only=True)
+            parts = []
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                parts.append(f"## Sheet: {sheet_name}")
+                rows = list(ws.iter_rows(values_only=True))
+                if rows:
+                    for i, row in enumerate(rows[:50]):
+                        cells = [str(c) if c is not None else "" for c in row[:20]]
+                        parts.append("| " + " | ".join(cells) + " |")
+                        if i == 0:
+                            parts.append("|" + "|".join(["---"] * len(cells)) + "|")
+            wb.close()
+            return "\n".join(parts)
+        except ImportError:
+            return ""
+    elif ext == ".pdf":
+        try:
+            from pdfminer.high_level import extract_text
+            return extract_text(path)
+        except Exception:
+            return ""
+    else:
+        try:
+            return Path(path).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return ""
 
 
 class MockSkill:
@@ -71,8 +107,9 @@ class MockSkill:
         # 优先使用选定的简历文件
         if self._selected_resume_path:
             try:
-                resume_content = Path(self._selected_resume_path).read_text(encoding="utf-8", errors="replace")
-                profile_summary = f"【候选人简历内容】\n{resume_content[:3000]}"
+                resume_content = _read_file_content(self._selected_resume_path)
+                if resume_content:
+                    profile_summary = f"【候选人简历内容】\n{resume_content[:3000]}"
             except Exception:
                 pass
 
@@ -93,8 +130,9 @@ class MockSkill:
         jd_context = ""
         if self._selected_jd_path:
             try:
-                jd_content = Path(self._selected_jd_path).read_text(encoding="utf-8", errors="replace")
-                jd_context = jd_content[:3000]
+                jd_content = _read_file_content(self._selected_jd_path)
+                if jd_content:
+                    jd_context = jd_content[:3000]
             except Exception:
                 pass
 
@@ -105,8 +143,9 @@ class MockSkill:
                 try:
                     jd_path = jd_entry.get("path", "")
                     if jd_path:
-                        content = Path(jd_path).read_text(encoding="utf-8", errors="replace")
-                        jd_context += f"\n{content[:3000]}"
+                        content = _read_file_content(jd_path)
+                        if content:
+                            jd_context += f"\n{content[:3000]}"
                 except Exception:
                     continue
 

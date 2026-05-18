@@ -30,6 +30,7 @@ class StorageManager:
             "materials/raw/resumes",
             "materials/raw/projects",
             "materials/raw/jds",
+            "materials/raw/images",
             "materials/notes",
             "sessions",
         ]:
@@ -42,7 +43,7 @@ class StorageManager:
         src_path = Path(src)
         if not src_path.exists():
             return None
-        category_map = {"resume": "resumes", "project": "projects", "jd": "jds"}
+        category_map = {"resume": "resumes", "project": "projects", "jd": "jds", "image": "images"}
         target_dir = self.base / "materials" / "raw" / category_map.get(category, "others")
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / src_path.name
@@ -102,6 +103,7 @@ class StorageManager:
             "resumes": [],
             "projects": [],
             "jds": [],
+            "images": [],
             "notes": [],
             "updated_at": "",
         }
