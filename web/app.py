@@ -31,7 +31,11 @@ from core.models import MockSession, MockQuestion, MockAnswer
 from skills.material import MaterialSkill
 from skills.prep import PrepSkill
 from skills.mock import MockSkill
-from connectors.obsidian import ObsidianConnector
+
+try:
+    from connectors.obsidian import ObsidianConnector
+except ImportError:
+    ObsidianConnector = None
 
 # Import skill modules for console capture
 import skills.material as material_module
@@ -74,7 +78,7 @@ def init_session():
         vault_path = config.get("obsidian", {}).get("vault_path", "")
 
         obsidian_connector = None
-        if vault_path and Path(vault_path).exists():
+        if vault_path and Path(vault_path).exists() and ObsidianConnector is not None:
             obsidian_connector = ObsidianConnector(vault_path, st.session_state.storage)
 
         st.session_state.obsidian_connector = obsidian_connector
