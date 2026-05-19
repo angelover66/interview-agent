@@ -153,7 +153,7 @@ def render_sidebar():
             "导航",
             pages,
             index=idx,
-            key="sidebar_nav",
+            key="sidebar_nav_v2",
         )
         page = page_map[selected]
         if page != st.session_state.page:
@@ -173,7 +173,7 @@ def page_material():
         uploaded = st.file_uploader(
             "上传素材",
             type=["txt", "md", "pdf", "xlsx", "xls", "png", "jpg", "jpeg", "webp"],
-            key="material_uploader",
+            key="material_uploader_v2",
             label_visibility="collapsed",
         )
         if uploaded:
@@ -200,7 +200,7 @@ def page_material():
             keyword = st.text_input(
                 "搜索",
                 placeholder="输入关键词...",
-                key="material_search",
+                key="material_search_v2",
                 label_visibility="collapsed",
             )
             display_files = files
@@ -263,18 +263,18 @@ def page_prep():
         st.markdown("**📄 选择简历**")
         resume_source = st.radio(
             "简历来源", ["从素材库选择", "上传本地文件"],
-            horizontal=True, key="prep_resume_source", label_visibility="collapsed",
+            horizontal=True, key="prep_resume_source_v2", label_visibility="collapsed",
         )
         selected_resume = None
         resume_path = ""
         if resume_source == "从素材库选择":
             if resumes:
                 resume_names = [r.get("file", r.get("title", "")) for r in resumes]
-                selected_resume = st.selectbox("简历", resume_names, key="prep_resume_select", label_visibility="collapsed")
+                selected_resume = st.selectbox("简历", resume_names, key="prep_resume_select_v2", label_visibility="collapsed")
             else:
                 st.warning("素材库没有简历")
         else:
-            uploaded = st.file_uploader("上传简历", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"], key="prep_resume_uploader")
+            uploaded = st.file_uploader("上传简历", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"], key="prep_resume_uploader_v2")
             if uploaded:
                 upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
                 upload_dir.mkdir(exist_ok=True)
@@ -287,18 +287,18 @@ def page_prep():
         st.markdown("**🎯 选择 JD**")
         jd_source = st.radio(
             "JD来源", ["从素材库选择", "上传本地文件"],
-            horizontal=True, key="prep_jd_source", label_visibility="collapsed",
+            horizontal=True, key="prep_jd_source_v2", label_visibility="collapsed",
         )
         selected_jd = None
         jd_path = ""
         if jd_source == "从素材库选择":
             if jds:
                 jd_names = [j.get("file", j.get("title", "")) for j in jds]
-                selected_jd = st.selectbox("JD", jd_names, key="prep_jd_select", label_visibility="collapsed")
+                selected_jd = st.selectbox("JD", jd_names, key="prep_jd_select_v2", label_visibility="collapsed")
             else:
                 st.warning("素材库没有 JD")
         else:
-            uploaded = st.file_uploader("上传 JD", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"], key="prep_jd_uploader")
+            uploaded = st.file_uploader("上传 JD", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"], key="prep_jd_uploader_v2")
             if uploaded:
                 upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
                 upload_dir.mkdir(exist_ok=True)
@@ -315,7 +315,7 @@ def page_prep():
             "目标公司与岗位",
             value=st.session_state.prep_target,
             placeholder="如: 字节跳动 资深B端产品经理",
-            key="prep_target_input",
+            key="prep_target_input_v2",
             label_visibility="collapsed",
         )
     with c2:
@@ -364,7 +364,7 @@ def page_prep():
             st.session_state.prep._conversation_history = []
             st.rerun()
 
-    question = st.chat_input("输入面试相关问题...", key="prep_chat_input")
+    question = st.chat_input("输入面试相关问题...", key="prep_chat_input_v2")
     if question:
         st.session_state.prep_chat_history.append({"role": "user", "content": question})
         with st.spinner("思考中..."):
@@ -427,20 +427,20 @@ def page_mock():
             st.markdown("**📄 选择简历**")
             resume_source = st.radio(
                 "简历来源", ["从素材库选择", "上传本地文件"],
-                horizontal=True, key="mock_resume_source", label_visibility="collapsed",
+                horizontal=True, key="mock_resume_source_v2", label_visibility="collapsed",
             )
             selected_resume = None
             resume_entry = None
             if resume_source == "从素材库选择":
                 if resumes:
                     resume_names = [r.get("file", r.get("title", "")) for r in resumes]
-                    selected_resume = st.selectbox("简历", resume_names, key="mock_resume_select", label_visibility="collapsed")
+                    selected_resume = st.selectbox("简历", resume_names, key="mock_resume_select_v2", label_visibility="collapsed")
                 else:
                     st.warning("素材库没有简历")
             else:
                 uploaded_resume = st.file_uploader(
                     "上传简历", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"],
-                    key="mock_resume_uploader",
+                    key="mock_resume_uploader_v2",
                 )
                 if uploaded_resume:
                     upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
@@ -454,20 +454,20 @@ def page_mock():
             st.markdown("**🎯 选择 JD**")
             jd_source = st.radio(
                 "JD来源", ["从素材库选择", "上传本地文件"],
-                horizontal=True, key="mock_jd_source", label_visibility="collapsed",
+                horizontal=True, key="mock_jd_source_v2", label_visibility="collapsed",
             )
             selected_jd = None
             jd_entry = None
             if jd_source == "从素材库选择":
                 if jds:
                     jd_names = [j.get("file", j.get("title", "")) for j in jds]
-                    selected_jd = st.selectbox("JD", jd_names, key="mock_jd_select", label_visibility="collapsed")
+                    selected_jd = st.selectbox("JD", jd_names, key="mock_jd_select_v2", label_visibility="collapsed")
                 else:
                     st.warning("素材库没有 JD")
             else:
                 uploaded_jd = st.file_uploader(
                     "上传 JD", type=["txt", "md", "pdf", "xlsx", "png", "jpg", "jpeg", "webp"],
-                    key="mock_jd_uploader",
+                    key="mock_jd_uploader_v2",
                 )
                 if uploaded_jd:
                     upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
@@ -563,7 +563,7 @@ def page_mock():
             st.session_state.show_review = True
             st.rerun()
 
-    answer = st.chat_input("输入你的回答...", key="mock_answer_input")
+    answer = st.chat_input("输入你的回答...", key="mock_answer_input_v2")
     if answer:
         st.session_state.mock_chat_history.append({"role": "user", "content": answer})
         with st.spinner("面试官思考中..."):
