@@ -166,9 +166,16 @@ def render_sidebar():
 def page_material():
     st.header("素材库")
 
-    tab1, tab2 = st.tabs(["导入", "浏览"])
+    # Use radio instead of tabs (avoid Streamlit tabs key conflicts across versions)
+    view_mode = st.radio(
+        "视图",
+        ["📥 导入", "📋 浏览"],
+        horizontal=True,
+        key="material_view_v2",
+        label_visibility="collapsed",
+    )
 
-    with tab1:
+    if "导入" in view_mode:
         st.caption("上传简历、JD 或项目文档。支持 .txt / .md / .pdf / .xlsx / .xls / .png / .jpg / .webp")
         uploaded = st.file_uploader(
             "上传素材",
@@ -192,7 +199,7 @@ def page_material():
                 display_rich(output)
             st.success(f"「{uploaded.name}」已入库")
 
-    with tab2:
+    else:
         files = st.session_state.storage.list_raw_files()
         if not files:
             st.info("素材库为空，请先导入")
@@ -225,16 +232,19 @@ def page_material():
                 with c1:
                     st.markdown(f"{cat_emoji} **{f['name']}**  `{size_kb}KB`")
                 with c2:
-                    view_key = f"view_{f['path']}"
+                    view_key = f"mat_view_{hash(f['path'])}"
                     label = "🖼️" if is_image else "📖"
                     if st.button(label, key=view_key):
-                        st.session_state[f"show_{view_key}"] = not st.session_state.get(f"show_{view_key}", False)
+                        show_key = f"mat_show_{hash(f['path'])}"
+                        st.session_state[show_key] = not st.session_state.get(show_key, False)
                 with c3:
-                    if st.button("🗑", key=f"del_{f['name']}"):
+                    del_key = f"mat_del_{hash(f['name'] + (f.get('category', '')))}"
+                    if st.button("🗑", key=del_key):
                         st.session_state.material.run("delete", f["name"])
                         st.rerun()
 
-                if st.session_state.get(f"show_{view_key}", False):
+                show_key = f"mat_show_{hash(f['path'])}"
+                if st.session_state.get(show_key, False):
                     if is_image:
                         try:
                             st.image(f["path"], caption=f["name"], use_container_width=True)
