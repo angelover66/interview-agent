@@ -25,3 +25,12 @@ mock:
     - 数据意识
     - 岗位匹配度
     - 表达质量
+
+# v2.0 新增
+vision:
+  provider: "anthropic"             # Claude Vision 用于 JD 图片提取
+  model: "claude-sonnet-4-6"       # 性价比最高的多模态模型
+
+voice:
+  provider: "openai"               # OpenAI Whisper API
+  model: "whisper-1"
