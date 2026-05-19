@@ -134,9 +134,7 @@ def _read_file(path: str) -> str:
 def render_sidebar():
     with st.sidebar:
         st.markdown("## 🎯 面试助手")
-        st.caption("上传简历与JD，开始智能面试准备")
-
-        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+        st.caption("上传简历与 JD，开始智能面试准备")
 
         pages = ["📂  素材库", "📖  面试准备", "🎯  模拟面试"]
         page_map = {
@@ -155,16 +153,12 @@ def render_sidebar():
             "导航",
             pages,
             index=idx,
-            label_visibility="collapsed",
             key="sidebar_nav",
         )
         page = page_map[selected]
         if page != st.session_state.page:
             st.session_state.page = page
             st.rerun()
-
-        st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
-        st.caption("v1.4 · 通用版")
 
 
 # ─── Page: Material ───────────────────────────────────────
