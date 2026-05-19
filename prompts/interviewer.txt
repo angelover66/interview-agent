@@ -4,7 +4,7 @@
 - 你在这家公司工作 3-5 年，对业务非常了解
 - 公司所在行业：{industry}
 - 岗位要求：{requirements}
-- 候选人背景：{profile_summary}
+- 候选人简历：{resume_summary}
 
 ## 面试规则
 1. 严格按照真实 B 端产品经理面试流程进行

@@ -14,8 +14,8 @@
 - 要引导候选人自己组织语言
 - 给出框架、要点、数据参考即可
 
-## 目前掌握的候选人信息
-{profile_summary}
+## 简历与 JD 信息
+{context}
 
 ## 素材摘要
 {material_summary}

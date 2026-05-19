@@ -13,7 +13,7 @@ from rich import box
 
 from core.llm import chat, chat_json
 from core.storage import StorageManager
-from core.models import ResumeInfo, ProjectInfo, JDInfo, NoteInfo, UserProfile
+from core.models import ResumeInfo, ProjectInfo, JDInfo, NoteInfo
 from core.scheduler import get_help_text
 
 console = Console()
@@ -45,7 +45,6 @@ class MaterialSkill:
             "import": self._cmd_import,
             "list": self._cmd_list,
             "search": self._cmd_search,
-            "profile": self._cmd_profile,
             "delete": self._cmd_delete,
             "help": lambda: self._show_help,
         }.get(action)
@@ -60,7 +59,6 @@ class MaterialSkill:
             "  material list             查看素材分类\n"
             "  material search <关键词>   搜索素材\n"
             "  material delete <文件名>   删除素材\n"
-            "  material profile          生成候选人画像\n"
             "  material help             显示此帮助",
             title="📂 material",
             border_style="blue",
@@ -280,14 +278,9 @@ class MaterialSkill:
             for n in notes[:10]:
                 n_tree.add(f"{n.get('title', '未命名')}")
 
-        # 画像
-        profile = self.storage.load_profile()
-        if profile:
-            tree.add(f"[bold]👤 候选人画像[/bold]")
-
         console.print(tree)
 
-        if not any([resumes, projects, jds, images, notes, profile]):
+        if not any([resumes, projects, jds, images, notes]):
             return "[dim]素材库为空。使用 material import <路径> 导入素材。[/dim]"
         return ""
 
@@ -371,81 +364,6 @@ class MaterialSkill:
             {"role": "user", "content": f"关键词：{keyword}\n\n素材：\n\n" + "\n---\n".join(summaries)}
         ], temperature=0.3)
         console.print(Panel(resp, title=f"🔍 语义搜索: {keyword}", border_style="yellow"))
-        return ""
-
-    # ─── profile ─────────────────────────────────────────
-
-    def _cmd_profile(self, args: str = "") -> str:
-        """基于所有素材生成/更新候选人画像。"""
-        files = self.storage.list_raw_files()
-        if not files:
-            return "[yellow]素材库为空，请先导入素材[/yellow]"
-
-        console.print("[dim]正在综合分析素材，生成候选人画像...[/dim]")
-
-        # 收集所有素材内容
-        materials_text = []
-        for f in files:
-            try:
-                content = Path(f["path"]).read_text(encoding="utf-8", errors="replace")[:5000]
-                materials_text.append(f"【{f['category']}/{f['name']}】\n{content[:2000]}")
-            except Exception:
-                continue
-
-        all_text = "\n---\n".join(materials_text)
-
-        # 读取索引中的结构化信息增强
-        index = self.storage.get_index()
-
-        system = """你是一个专业的 B 端产品经理简历分析师。请根据所有素材生成一个完整的候选人画像。
-
-输出 JSON 格式：
-{
-    "name": "姓名",
-    "target_positions": ["目标岗位1", "目标岗位2"],
-    "current_title": "当前职位",
-    "years_of_experience": 5,
-    "education": [{"school": "...", "degree": "...", "major": "..."}],
-    "core_skills": ["技能1", "技能2"],
-    "career_summary": "职业简介（50字以内）",
-    "key_projects": [{"name": "项目名", "role": "角色", "metrics": ["量化成果1"]}],
-    "b2b_domain_expertise": ["领域专长"],
-    "highlight_achievements": ["亮点成就"],
-    "weak_areas": ["需加强的方面"]
-}"""
-
-        try:
-            result = chat_json(system=system, messages=[
-                {"role": "user", "content": f"素材内容：\n\n{all_text[:30000]}"}
-            ], temperature=0.3)
-        except Exception as e:
-            return f"[red]画像生成失败: {e}[/red]"
-
-        profile = UserProfile(**result)
-        self.storage.save_profile(profile)
-
-        # 显示画像
-        console.print(Panel(f"""
-[bold]👤 候选人画像[/bold]
-
-[bold]姓名:[/bold] {profile.name}
-[bold]目标岗位:[/bold] {', '.join(profile.target_positions)}
-[bold]当前职位:[/bold] {profile.current_title}
-[bold]经验年限:[/bold] {profile.years_of_experience} 年
-
-[bold]核心技能:[/bold]
-{chr(10).join(f'  • {s}' for s in profile.core_skills)}
-
-[bold]B端领域专长:[/bold]
-{chr(10).join(f'  • {d}' for d in profile.b2b_domain_expertise)}
-
-[bold]亮点成就:[/bold]
-{chr(10).join(f'  • {a}' for a in profile.highlight_achievements)}
-
-[bold]需加强:[/bold]
-{chr(10).join(f'  • {w}' for w in profile.weak_areas)}
-        """.strip(), title="📋 候选人画像", border_style="cyan"))
-
         return ""
 
     # ─── delete ──────────────────────────────────────────

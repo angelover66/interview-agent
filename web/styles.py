@@ -20,10 +20,10 @@ THEME_CSS = """
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
 
-/* Hide Streamlit junk */
+/* Hide Streamlit junk — use visibility (not display:none) to keep sidebar toggle clickable */
 .stApp [data-testid="stToolbar"] { display: none !important; }
 .stApp footer { display: none !important; }
-#MainMenu { display: none !important; }
+#MainMenu { visibility: hidden; }
 .stDeployButton { display: none !important; }
 
 /* ── Typography ── */
@@ -66,6 +66,13 @@ p, span, label { color: var(--text); }
     font-weight: 500 !important;
     border-radius: var(--radius) !important;
     transition: all 0.15s ease !important;
+    background: #F3F4F6 !important;
+    border: 1px solid #D1D5DB !important;
+    color: #374151 !important;
+}
+.stButton > button:hover {
+    background: #E5E7EB !important;
+    border-color: #9CA3AF !important;
 }
 .stButton > button[kind="primary"] {
     background: var(--accent) !important;
@@ -76,11 +83,12 @@ p, span, label { color: var(--text); }
     background: #1D4ED8 !important;
 }
 .stButton > button[kind="secondary"] {
-    background: transparent !important;
-    border: 1px solid var(--border) !important;
-    color: var(--text) !important;
+    background: #F9FAFB !important;
+    border: 1px solid #D1D5DB !important;
+    color: #374151 !important;
 }
 .stButton > button[kind="secondary"]:hover {
+    background: #F3F4F6 !important;
     border-color: var(--accent) !important;
     color: var(--accent) !important;
 }
@@ -162,15 +170,6 @@ p, span, label { color: var(--text); }
     letter-spacing: 0.05em;
 }
 
-/* ── Simple card ── */
-.simple-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 0.75rem;
-}
-
 /* ── Interview status bar ── */
 .interview-bar {
     background: var(--bg);
@@ -191,12 +190,6 @@ p, span, label { color: var(--text); }
     border-radius: var(--radius) !important;
     border: 1px solid var(--border) !important;
     background: var(--bg) !important;
-}
-
-/* ── Metrics ── */
-[data-testid="stMetricValue"] {
-    color: var(--text) !important;
-    font-weight: 600 !important;
 }
 
 /* ── Radio buttons ── */

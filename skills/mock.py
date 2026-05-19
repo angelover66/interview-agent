@@ -122,19 +122,6 @@ class MockSkill:
             except Exception:
                 pass
 
-        # 回退到画像
-        if not profile_summary:
-            profile = self.storage.load_profile()
-            if profile:
-                profile_summary = (
-                    f"姓名: {profile.name}\n"
-                    f"当前职位: {profile.current_title}\n"
-                    f"经验年限: {profile.years_of_experience}\n"
-                    f"核心技能: {', '.join(profile.core_skills)}\n"
-                    f"亮点: {'; '.join(profile.highlight_achievements)}\n"
-                    f"弱点: {'; '.join(profile.weak_areas)}\n"
-                )
-
         # 优先使用选定的 JD 文件
         jd_context = ""
         if self._selected_jd_path:
@@ -164,6 +151,7 @@ class MockSkill:
         prompt = prompt.replace("{industry}", "互联网/B端 SaaS")
         prompt = prompt.replace("{requirements}", jd_context[:1500] or "标准 B 端产品经理要求")
         prompt = prompt.replace("{profile_summary}", profile_summary[:3000])
+        prompt = prompt.replace("{resume_summary}", profile_summary[:3000])
 
         return prompt
 
@@ -336,17 +324,20 @@ class MockSkill:
 
         transcript = "\n".join(transcript_lines)
 
-        # 获取画像
-        profile = self.storage.load_profile()
-        profile_summary = ""
-        if profile:
-            profile_summary = f"{profile.name}, {profile.current_title}, 核心技能: {', '.join(profile.core_skills[:5])}"
+        # 获取简历内容作为评估上下文
+        resume_context = ""
+        if self._selected_resume_path:
+            try:
+                resume_context = _read_file_content(self._selected_resume_path)[:3000]
+            except Exception:
+                pass
 
         # 加载评估 prompt
         eval_prompt = self._load_prompt("evaluator.txt")
         eval_prompt = eval_prompt.replace("{position}", self.current_session.position)
         eval_prompt = eval_prompt.replace("{company}", self.current_session.company)
-        eval_prompt = eval_prompt.replace("{profile_summary}", profile_summary[:1000])
+        eval_prompt = eval_prompt.replace("{profile_summary}", resume_context[:1000])
+        eval_prompt = eval_prompt.replace("{resume_summary}", resume_context[:1000])
         eval_prompt = eval_prompt.replace("{transcript}", transcript[:15000])
 
         try:

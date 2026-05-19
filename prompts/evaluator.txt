@@ -3,7 +3,7 @@
 ## 候选人信息
 目标岗位：{position}
 目标公司：{company}
-简历摘要：{profile_summary}
+简历摘要：{resume_summary}
 
 ## 面试记录
 {transcript}

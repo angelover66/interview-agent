@@ -53,17 +53,6 @@ class PrepSkill:
         """构建候选人上下文。"""
         parts = []
 
-        # 画像
-        profile = self.storage.load_profile()
-        if profile:
-            parts.append("【候选人画像】")
-            parts.append(f"姓名: {profile.name}")
-            parts.append(f"当前职位: {profile.current_title}")
-            parts.append(f"核心技能: {', '.join(profile.core_skills)}")
-            parts.append(f"亮点: {'; '.join(profile.highlight_achievements)}")
-            parts.append(f"需加强: {'; '.join(profile.weak_areas)}")
-            parts.append("")
-
         # 素材摘要
         index = self.storage.get_index()
         material_summary = []
@@ -124,9 +113,12 @@ class PrepSkill:
             return "[red]请输入目标公司+岗位，如: prep for 字节跳动 B端产品经理[/red]"
 
         self._current_target = args.strip()
-        profile = self.storage.load_profile()
-        if not profile:
-            return "[yellow]尚未生成候选人画像，建议先导入素材并执行 material profile[/yellow]"
+
+        # 检查素材是否为空
+        index = self.storage.get_index()
+        has_materials = any(index.get(k) for k in ["resumes", "projects", "jds"])
+        if not has_materials:
+            return "[yellow]素材库为空，请先到素材库上传简历或 JD[/yellow]"
 
         context = self._build_context()
 
