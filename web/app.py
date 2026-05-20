@@ -18,7 +18,7 @@ except Exception:
 
 from rich.console import Console
 from core.storage import StorageManager
-from core.llm import chat
+from core.llm import chat, chat_json
 from skills.material import MaterialSkill
 from skills.prep import PrepSkill
 from skills.mock import MockSkill
@@ -282,35 +282,39 @@ def page_position():
                 if jd_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                     st.image(jd_file, caption="JD 预览", width=400)
                     if st.button("🔍 自动提取", type="primary"):
-                        with st.spinner("正在分析 JD 图片..."):
+                        with st.spinner("正在 OCR 识别 + DeepSeek 结构化提取..."):
                             try:
-                                api_key = os.environ.get("OPENAI_API_KEY", "")
-                                if not api_key:
-                                    st.error("需要 OPENAI_API_KEY。请到 platform.openai.com/api-keys 获取，然后在 Streamlit Cloud Secrets 中配置 OPENAI_API_KEY。")
+                                # Step 1: EasyOCR 提取图片中的文字
+                                import easyocr, numpy as np
+                                from PIL import Image
+                                img_bytes = jd_file.read()
+                                # Save to temp file for PIL
+                                tmp_img = Path(tempfile.gettempdir()) / f"ocr_{jd_file.name}"
+                                tmp_img.write_bytes(img_bytes)
+                                img = Image.open(str(tmp_img))
+                                img_np = np.array(img.convert('RGB'))
+
+                                reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
+                                ocr_results = reader.readtext(img_np)
+                                ocr_text = '\n'.join([r[1] for r in ocr_results])
+
+                                if not ocr_text.strip():
+                                    st.error("图片中未识别到文字，请确认图片清晰度或手动填写。")
                                 else:
-                                    from openai import OpenAI
-                                    client = OpenAI(api_key=api_key)
-                                    img_bytes = jd_file.read()
-                                    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-                                    ext = jd_file.name.split('.')[-1].lower()
-                                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
-                                    jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
-                                    resp = client.chat.completions.create(
-                                        model="gpt-4o",
-                                        max_tokens=1024,
-                                        messages=[
-                                            {"role": "system", "content": jd_prompt_text},
-                                            {"role": "user", "content": [
-                                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
-                                                {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
-                                            ]}
-                                        ],
-                                    )
-                                    raw = resp.choices[0].message.content
-                                    extracted = json.loads(raw.split("{", 1)[1].rsplit("}", 1)[0])
-                                    extracted = json.loads("{" + extracted + "}")
-                                    st.session_state._extracted_position = extracted
-                                    st.success("提取成功！请确认下方信息后保存。")
+                                    st.text_area("OCR 识别结果", value=ocr_text[:2000], height=150, disabled=True)
+
+                                    # Step 2: DeepSeek 结构化
+                                    with st.spinner("DeepSeek 结构化中..."):
+                                        jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
+                                        result = chat_json(
+                                            system=jd_prompt_text,
+                                            messages=[{"role": "user", "content": f"以下是从 JD 图片中 OCR 识别出的文字，请从中提取结构化信息：\n\n{ocr_text[:6000]}"}],
+                                            temperature=0.1
+                                        )
+                                        st.session_state._extracted_position = result
+                                        st.success("提取成功！请确认下方信息后保存。")
+                            except ImportError:
+                                st.error("OCR 库未安装。请刷新页面后重试。")
                             except Exception as e:
                                 st.error(f"提取失败: {e}")
                 elif jd_file.name.lower().endswith(".pdf"):
