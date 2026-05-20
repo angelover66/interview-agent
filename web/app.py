@@ -283,15 +283,15 @@ def page_position():
         if not is_edit:
             jd_file = st.file_uploader("上传 JD 图片", type=["png", "jpg", "jpeg", "webp"], key="jd_file_v4")
             if jd_file:
-                # Compress image to reduce upload failures
+                # 强力压缩：600px + quality 30，确保 base64 < 50KB
                 try:
                     from PIL import Image
                     img = Image.open(jd_file)
-                    img.thumbnail((1200, 1200), Image.LANCZOS)
+                    img.thumbnail((600, 600), Image.LANCZOS)
                     if img.mode in ('RGBA', 'P'):
                         img = img.convert('RGB')
                     compressed = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-                    img.save(compressed.name, 'JPEG', quality=50)
+                    img.save(compressed.name, 'JPEG', quality=30, optimize=True)
                     compressed_size = Path(compressed.name).stat().st_size
                 except Exception:
                     compressed = None
@@ -320,7 +320,7 @@ def page_position():
 
                                 jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
                                 resp = client.chat.completions.create(
-                                    model="qwen-vl-plus", max_tokens=1024,
+                                    model="qwen-vl-plus", max_tokens=1024, timeout=30,
                                     messages=[
                                         {"role": "system", "content": jd_prompt_text},
                                         {"role": "user", "content": [
@@ -340,7 +340,7 @@ def page_position():
                         finally:
                             if compressed:
                                 Path(compressed.name).unlink(missing_ok=True)
-                            st.session_state._extracting = False
+                            # 不重置 _extracting，防止 st.rerun() 后重复提取
                         st.rerun()
 
         if just_extracted:
@@ -372,6 +372,7 @@ def page_position():
                 st.session_state._show_position_form = False
                 st.session_state._edit_position_idx = None
                 st.session_state._just_extracted = False
+                st.session_state._extracting = False
                 st.success("岗位修改成功" if is_edit else "岗位保存成功")
                 st.rerun()
         with c_cancel:
@@ -380,6 +381,7 @@ def page_position():
                 st.session_state._extracted_position = None
                 st.session_state._edit_position_idx = None
                 st.session_state._just_extracted = False
+                st.session_state._extracting = False
                 st.rerun()
 
     # ── 岗位列表表格 ──
