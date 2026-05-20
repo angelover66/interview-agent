@@ -263,89 +263,112 @@ def page_position():
     st.header("💼 岗位库")
 
     # ── 新增岗位按钮 ──
+    editing_idx = st.session_state.get("_edit_position_idx")
     if st.button("＋ 新增岗位", type="secondary"):
         st.session_state._show_position_form = True
+        st.session_state._edit_position_idx = None
+        st.session_state._extracted_position = {}
 
-    # ── 新增岗位弹窗表单 ──
+    # ── 岗位表单弹窗 ──
     if st.session_state.get("_show_position_form", False):
         st.markdown("---")
-        st.subheader("新增岗位")
+        is_edit = editing_idx is not None
+        st.subheader("编辑岗位" if is_edit else "新增岗位")
         st.caption("上传 JD 图片/PDF 自动提取，或直接手动填写。四个字段均为必填。")
 
-        jd_file = st.file_uploader("上传 JD 文件（图片/PDF，可选）", type=["png", "jpg", "jpeg", "webp", "pdf"], key="jd_file_v4")
-        if jd_file:
-            extracted = None
-            # 图片：Claude Vision 提取
-            if jd_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-                st.image(jd_file, caption="JD 预览", width=400)
-                if st.button("🔍 自动提取", type="primary"):
-                    with st.spinner("正在分析 JD 图片..."):
-                        try:
-                            import anthropic
-                            client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-                            img_data = base64.b64encode(jd_file.read()).decode('utf-8')
-                            media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}[jd_file.name.split('.')[-1].lower()]
-                            jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
-                            resp = client.messages.create(
-                                model="claude-sonnet-4-6", max_tokens=1024, system=jd_prompt_text,
-                                messages=[{"role": "user", "content": [
-                                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_data}},
-                                    {"type": "text", "text": "提取结构化岗位信息。"}
-                                ]}],
-                            )
-                            extracted = json.loads(resp.content[0].text.split("{", 1)[1].rsplit("}", 1)[0])
-                            extracted = json.loads("{" + extracted + "}")
-                            st.session_state._extracted_position = extracted
-                            st.success("提取成功！请确认下方信息后保存。")
-                        except Exception as e:
-                            st.error(f"提取失败: {e}")
-            elif jd_file.name.lower().endswith(".pdf"):
-                pdf_text = _read_file(str(Path(tempfile.gettempdir()) / "interview_agent_uploads" / jd_file.name))
-                if not pdf_text:
+        if not is_edit:
+            jd_file = st.file_uploader("上传 JD 文件（图片/PDF，可选）", type=["png", "jpg", "jpeg", "webp", "pdf"], key="jd_file_v4")
+            if jd_file:
+                if jd_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+                    st.image(jd_file, caption="JD 预览", width=400)
+                    if st.button("🔍 自动提取", type="primary"):
+                        with st.spinner("正在分析 JD 图片..."):
+                            try:
+                                import anthropic
+                                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+                                img_data = base64.b64encode(jd_file.read()).decode('utf-8')
+                                media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}[jd_file.name.split('.')[-1].lower()]
+                                jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
+                                resp = client.messages.create(
+                                    model="claude-sonnet-4-6", max_tokens=1024, system=jd_prompt_text,
+                                    messages=[{"role": "user", "content": [
+                                        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_data}},
+                                        {"type": "text", "text": "提取结构化岗位信息。"}
+                                    ]}],
+                                )
+                                extracted = json.loads(resp.content[0].text.split("{", 1)[1].rsplit("}", 1)[0])
+                                extracted = json.loads("{" + extracted + "}")
+                                st.session_state._extracted_position = extracted
+                                st.success("提取成功！请确认下方信息后保存。")
+                            except Exception as e:
+                                st.error(f"提取失败: {e}")
+                elif jd_file.name.lower().endswith(".pdf"):
                     upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
                     upload_dir.mkdir(exist_ok=True)
                     tmp = upload_dir / jd_file.name
                     tmp.write_bytes(jd_file.read())
                     pdf_text = _read_file(str(tmp))
-                st.text_area("PDF 文本内容（可复制到下方表单）", value=pdf_text[:2000] if pdf_text else "无法提取文本", height=150, disabled=True)
+                    st.text_area("PDF 文本内容（可复制到下方表单）", value=pdf_text[:2000] if pdf_text else "无法提取文本", height=150, disabled=True)
 
         extracted = st.session_state.get("_extracted_position", {}) or {}
-        company = st.text_input("公司名称 *", value=extracted.get("company", ""), key="pos_company_v4", placeholder="如：字节跳动")
-        position = st.text_input("岗位名称 *", value=extracted.get("position", ""), key="pos_position_v4", placeholder="如：资深B端产品经理")
-        resp_text = st.text_area("工作职责 *（每行一条）", value="\n".join(extracted.get("responsibilities", [])), key="pos_resp_v4", placeholder="负责XX产品的需求分析...\n制定产品路线图...")
-        req_text = st.text_area("任职要求 *（每行一条）", value="\n".join(extracted.get("requirements", [])), key="pos_req_v4", placeholder="5年以上B端产品经验...\n熟悉SaaS产品设计...")
+        company = st.text_input("公司名称 *", value=extracted.get("company", ""), key="pos_company_v5", placeholder="如：字节跳动")
+        position = st.text_input("岗位名称 *", value=extracted.get("position", ""), key="pos_position_v5", placeholder="如：资深B端产品经理")
+        resp_text = st.text_area("工作职责 *（每行一条）", value="\n".join(extracted.get("responsibilities", [])), key="pos_resp_v5", placeholder="负责XX产品的需求分析...")
+        req_text = st.text_area("任职要求 *（每行一条）", value="\n".join(extracted.get("requirements", [])), key="pos_req_v5", placeholder="5年以上B端产品经验...")
 
         c_save, c_cancel = st.columns([1, 1])
         with c_save:
-            if st.button("💾 保存岗位", type="primary", use_container_width=True, disabled=not (company and position and resp_text.strip() and req_text.strip())):
+            label = "💾 保存修改" if is_edit else "💾 保存岗位"
+            if st.button(label, type="primary", use_container_width=True, disabled=not (company and position and resp_text.strip() and req_text.strip())):
                 data = {
                     "company": company.strip(), "position": position.strip(),
                     "responsibilities": [r.strip() for r in resp_text.strip().split("\n") if r.strip()],
                     "requirements": [r.strip() for r in req_text.strip().split("\n") if r.strip()],
-                    "source": "vision" if st.session_state.get("_extracted_position") else "manual",
-                    "created_at": datetime.now().isoformat(),
+                    "source": extracted.get("source", "manual"),
+                    "created_at": extracted.get("created_at", datetime.now().isoformat()),
                 }
-                st.session_state.storage.save_position(data)
+                if is_edit:
+                    st.session_state.storage.update_position(editing_idx, data)
+                else:
+                    st.session_state.storage.save_position(data)
                 st.session_state._extracted_position = None
                 st.session_state._show_position_form = False
-                st.success("岗位保存成功")
+                st.session_state._edit_position_idx = None
+                st.success("岗位修改成功" if is_edit else "岗位保存成功")
                 st.rerun()
         with c_cancel:
             if st.button("取消", use_container_width=True):
                 st.session_state._show_position_form = False
                 st.session_state._extracted_position = None
+                st.session_state._edit_position_idx = None
                 st.rerun()
 
     # ── 岗位列表表格 ──
     st.markdown("---")
     positions = st.session_state.storage.list_positions()
     if not positions:
-        st.info("岗位库为空，点击上方「新增岗位」添加")
+        st.info("岗位库为空，点击上方「＋ 新增岗位」添加")
     else:
+        # 表头
+        h1, h2, h3, h4, h5, h6 = st.columns([0.5, 2, 2, 3, 3, 1.5])
+        with h1:
+            st.markdown("**#**")
+        with h2:
+            st.markdown("**公司名称**")
+        with h3:
+            st.markdown("**岗位名称**")
+        with h4:
+            st.markdown("**工作职责**")
+        with h5:
+            st.markdown("**任职资格**")
+        with h6:
+            st.markdown("**操作**")
+        st.markdown("---")
+
         for i, p in enumerate(positions):
             resp_summary = "；".join(p.get("responsibilities", []))[:80] + ("..." if len("；".join(p.get("responsibilities", []))) > 80 else "")
             req_summary = "；".join(p.get("requirements", []))[:80] + ("..." if len("；".join(p.get("requirements", []))) > 80 else "")
-            c1, c2, c3, c4, c5, c6 = st.columns([0.5, 2, 2, 3, 3, 1])
+            c1, c2, c3, c4, c5, c6 = st.columns([0.5, 2, 2, 3, 3, 1.5])
             with c1:
                 st.markdown(f"<small>{i+1}</small>", unsafe_allow_html=True)
             with c2:
@@ -357,20 +380,39 @@ def page_position():
             with c5:
                 st.markdown(f"<small>{req_summary}</small>", unsafe_allow_html=True)
             with c6:
-                if st.button("🗑", key=f"pos_del_{i}"):
-                    st.session_state.storage.delete_position(i)
+                ce1, ce2 = st.columns([1, 1])
+                with ce1:
+                    if st.button("✏️", key=f"pos_edit_{i}"):
+                        st.session_state._edit_position_idx = i
+                        st.session_state._edit_position_data = dict(p)
+                        st.session_state._show_position_form = True
+                with ce2:
+                    if st.button("🗑", key=f"pos_del_{i}"):
+                        st.session_state._confirm_delete_idx = i
+
+    # ── 删除确认 ──
+    if st.session_state.get("_confirm_delete_idx") is not None:
+        idx = st.session_state["_confirm_delete_idx"]
+        p = positions[idx] if idx < len(positions) else None
+        if p:
+            st.warning(f"确认删除「{p['company']} — {p['position']}」？此操作不可撤销。")
+            cc1, cc2 = st.columns([1, 1])
+            with cc1:
+                if st.button("✅ 确认删除", type="primary"):
+                    st.session_state.storage.delete_position(idx)
+                    st.session_state._confirm_delete_idx = None
                     st.success("岗位删除成功")
                     st.rerun()
-            # Expand for full details
-            with st.expander(f"详情: {p['company']} — {p['position']}"):
-                st.markdown(f"**公司**：{p['company']}　|　**岗位**：{p['position']}")
-                st.markdown("**工作职责**：")
-                for r in p.get("responsibilities", []):
-                    st.markdown(f"- {r}")
-                st.markdown("**任职要求**：")
-                for r in p.get("requirements", []):
-                    st.markdown(f"- {r}")
-                st.caption(f"来源：{p.get('source', 'manual')} | 创建：{p.get('created_at', '')[:16]}")
+            with cc2:
+                if st.button("取消", type="secondary"):
+                    st.session_state._confirm_delete_idx = None
+                    st.rerun()
+
+    # ── 编辑模式：预填表单 ──
+    if st.session_state.get("_edit_position_data"):
+        st.session_state._extracted_position = st.session_state._edit_position_data
+        st.session_state._show_position_form = True
+        st.session_state._edit_position_data = None
 
 
 # ─── Page 4: 面试准备 ─────────────────────────────────────
@@ -381,40 +423,39 @@ def page_prep():
     # Step 1: 选简历（仅从简历库选择）
     st.markdown("**📄 选择简历**")
     resumes = st.session_state.storage.list_resumes()
-    if not resumes:
+    if resumes:
+        resume_names = [r['display_name'] for r in resumes]
+        resume_choice = st.selectbox("简历", resume_names, key="prep_resume_choice_v4", label_visibility="collapsed")
+        resume_path = next((r['file_path'] for r in resumes if r['display_name'] == resume_choice), "")
+    else:
         st.warning("简历库为空，请先去「📄 简历库」上传简历")
-        return
-
-    resume_names = [r['display_name'] for r in resumes]
-    resume_choice = st.selectbox("简历", resume_names, key="prep_resume_choice_v4", label_visibility="collapsed")
-    resume_path = next((r['file_path'] for r in resumes if r['display_name'] == resume_choice), "")
+        resume_path = ""
 
     # Step 2: 选岗位（仅从岗位库选择）
     st.markdown("**💼 选择岗位**")
     positions = st.session_state.storage.list_positions()
-    if not positions:
+    if positions:
+        position_labels = [f"{p['company']} — {p['position']}" for p in positions]
+        position_choice = st.selectbox("岗位", position_labels, key="prep_pos_choice_v4", label_visibility="collapsed")
+        position_data = next((p for p in positions if f"{p['company']} — {p['position']}" == position_choice), None)
+    else:
         st.warning("岗位库为空，请先去「💼 岗位库」新增岗位")
-        return
-
-    position_labels = [f"{p['company']} — {p['position']}" for p in positions]
-    position_choice = st.selectbox("岗位", position_labels, key="prep_pos_choice_v4", label_visibility="collapsed")
-    position_data = next((p for p in positions if f"{p['company']} — {p['position']}" == position_choice), None)
+        position_data = None
 
     # Step 3: 生成材料（仅需简历+JD，素材库为空也可）
     can_generate = bool(resume_path and position_data)
-    if can_generate:
-        if st.button("🚀 生成面试准备材料", type="primary", use_container_width=True):
-            resume_text = _read_file(resume_path)
-            jd_text = f"公司: {position_data['company']}\n岗位: {position_data['position']}\n职责: {'; '.join(position_data.get('responsibilities', []))}\n要求: {'; '.join(position_data.get('requirements', []))}"
-            file_context = f"简历:\n{resume_text}\n\n岗位信息:\n{jd_text}"
+    if st.button("🚀 生成面试准备材料", type="primary", use_container_width=True, disabled=not can_generate):
+        resume_text = _read_file(resume_path)
+        jd_text = f"公司: {position_data['company']}\n岗位: {position_data['position']}\n职责: {'; '.join(position_data.get('responsibilities', []))}\n要求: {'; '.join(position_data.get('requirements', []))}"
+        file_context = f"简历:\n{resume_text}\n\n岗位信息:\n{jd_text}"
 
-            with st.spinner("生成中..."):
-                output = capture_output(prep_module, st.session_state.prep, "for", f"{position_data['company']} {position_data['position']}")
-            st.session_state.prep_chat_history.append({"role": "assistant", "content": output or "学习材料已生成"})
-            st.session_state.prep._file_context = file_context
-            st.rerun()
-    else:
-        st.caption("请选择简历和岗位后，点击「生成面试准备材料」")
+        with st.spinner("生成中..."):
+            output = capture_output(prep_module, st.session_state.prep, "for", f"{position_data['company']} {position_data['position']}")
+        st.session_state.prep_chat_history.append({"role": "assistant", "content": output or "学习材料已生成"})
+        st.session_state.prep._file_context = file_context
+        st.rerun()
+    if not can_generate:
+        st.caption("请先在简历库上传简历、岗位库新增岗位，然后在此选择")
 
     # Chat
     if st.session_state.prep_chat_history:
@@ -531,24 +572,24 @@ def page_mock():
         # Resume (from library only)
         st.markdown("**📄 选择简历**")
         resumes = st.session_state.storage.list_resumes()
-        if not resumes:
+        if resumes:
+            resume_names = [r['display_name'] for r in resumes]
+            resume_choice = st.selectbox("简历", resume_names, key="mock_resume_choice_v4", label_visibility="collapsed")
+            resume_path = next((r['file_path'] for r in resumes if r['display_name'] == resume_choice), "")
+        else:
             st.warning("简历库为空，请先去「📄 简历库」上传简历")
-            return
-
-        resume_names = [r['display_name'] for r in resumes]
-        resume_choice = st.selectbox("简历", resume_names, key="mock_resume_choice_v4", label_visibility="collapsed")
-        resume_path = next((r['file_path'] for r in resumes if r['display_name'] == resume_choice), "")
+            resume_path = ""
 
         # Position (from library only)
         st.markdown("**💼 选择岗位**")
         positions = st.session_state.storage.list_positions()
-        if not positions:
+        if positions:
+            position_labels = [f"{p['company']} — {p['position']}" for p in positions]
+            position_choice = st.selectbox("岗位", position_labels, key="mock_pos_choice_v4", label_visibility="collapsed")
+            position_data = next((p for p in positions if f"{p['company']} — {p['position']}" == position_choice), None)
+        else:
             st.warning("岗位库为空，请先去「💼 岗位库」新增岗位")
-            return
-
-        position_labels = [f"{p['company']} — {p['position']}" for p in positions]
-        position_choice = st.selectbox("岗位", position_labels, key="mock_pos_choice_v4", label_visibility="collapsed")
-        position_data = next((p for p in positions if f"{p['company']} — {p['position']}" == position_choice), None)
+            position_data = None
 
         can_start = bool(resume_path and position_data)
         if st.button("🎬 开始面试", type="primary", use_container_width=True, disabled=not can_start):
@@ -570,6 +611,8 @@ def page_mock():
             st.session_state.mock_started = True
             st.session_state.mock_active = True
             st.rerun()
+        if not can_start:
+            st.caption("请先在简历库上传简历、岗位库新增岗位，然后在此选择")
         return
 
     # ── Active interview ──
