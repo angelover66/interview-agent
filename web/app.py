@@ -300,7 +300,7 @@ def page_position():
                                     mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
                                     jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
                                     resp = client.chat.completions.create(
-                                        model="gpt-4o",
+                                        model="gpt-5-mini",
                                         max_tokens=1024,
                                         messages=[
                                             {"role": "system", "content": jd_prompt_text},
