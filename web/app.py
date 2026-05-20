@@ -284,19 +284,25 @@ def page_position():
                     if st.button("🔍 自动提取", type="primary"):
                         with st.spinner("正在分析 JD 图片..."):
                             try:
-                                import anthropic
-                                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-                                img_data = base64.b64encode(jd_file.read()).decode('utf-8')
-                                media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}[jd_file.name.split('.')[-1].lower()]
+                                from openai import OpenAI
+                                api_key = os.environ.get("DEEPSEEK_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
+                                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+                                img_bytes = jd_file.read()
+                                img_data = base64.b64encode(img_bytes).decode('utf-8')
+                                ext = jd_file.name.split('.')[-1].lower()
+                                media_type = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
                                 jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
-                                resp = client.messages.create(
-                                    model="claude-sonnet-4-6", max_tokens=1024, system=jd_prompt_text,
-                                    messages=[{"role": "user", "content": [
-                                        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_data}},
-                                        {"type": "text", "text": "提取结构化岗位信息。"}
-                                    ]}],
+                                resp = client.chat.completions.create(
+                                    model="deepseek-chat",
+                                    max_tokens=1024,
+                                    messages=[{"role": "system", "content": jd_prompt_text},
+                                              {"role": "user", "content": [
+                                                  {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{img_data}"}},
+                                                  {"type": "text", "text": "提取结构化岗位信息。只返回 JSON，不要其他内容。"}
+                                              ]}],
                                 )
-                                extracted = json.loads(resp.content[0].text.split("{", 1)[1].rsplit("}", 1)[0])
+                                raw = resp.choices[0].message.content
+                                extracted = json.loads(raw.split("{", 1)[1].rsplit("}", 1)[0])
                                 extracted = json.loads("{" + extracted + "}")
                                 st.session_state._extracted_position = extracted
                                 st.success("提取成功！请确认下方信息后保存。")

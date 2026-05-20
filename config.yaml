@@ -26,11 +26,9 @@ mock:
     - 岗位匹配度
     - 表达质量
 
-# v2.0 新增
-vision:
-  provider: "anthropic"             # Claude Vision 用于 JD 图片提取
-  model: "claude-sonnet-4-6"       # 性价比最高的多模态模型
+# v2.0.2: Vision 使用 DeepSeek 多模态（与主 LLM 共用 API key）
+# deepseek-chat 支持图片输入，无需额外配置
 
 voice:
-  provider: "openai"               # OpenAI Whisper API
+  provider: "openai"               # OpenAI Whisper API（语音转文字，可选）
   model: "whisper-1"
