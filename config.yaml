@@ -26,9 +26,12 @@ mock:
     - 岗位匹配度
     - 表达质量
 
-# v2.0.2: Vision 使用 DeepSeek 多模态（与主 LLM 共用 API key）
-# deepseek-chat 支持图片输入，无需额外配置
+# v2.0.3: JD 图片提取使用 OpenAI GPT-4o via 0011.ai 代理
+vision:
+  provider: "openai"
+  base_url: "https://api.0011.ai/v1"  # 0011.ai OpenAI 兼容代理
+  model: "gpt-4o"
 
 voice:
-  provider: "openai"               # OpenAI Whisper API（语音转文字，可选）
+  provider: "openai"
   model: "whisper-1"
