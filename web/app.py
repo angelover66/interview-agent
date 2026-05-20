@@ -419,7 +419,7 @@ def page_prep():
             fc = getattr(prep, '_file_context', '')
             sp = Path(__file__).parent.parent / "prompts" / "prep_assistant.txt"
             system = sp.read_text() if sp.exists() else "你是面试准备助手"
-            for ph in ["{profile_summary}", "{material_summary}", "{context}", "{search_results}"]:
+            for ph in ["{material_summary}", "{context}", "{search_results}"]:
                 system = system.replace(ph, fc[:5000])
             prep._conversation_history.append({"role": "user", "content": question})
             try:
@@ -571,34 +571,17 @@ def page_mock():
         if content:
             st.markdown(chat_bubble(msg["role"], content), unsafe_allow_html=True)
 
-    # Voice input
-    c_voice, c_text = st.columns([1, 4])
-    with c_voice:
-        try:
-            from streamlit_mic_recorder import mic_recorder
-            audio = mic_recorder(start_prompt="🎤 录音", stop_prompt="⏹ 停止", key="mock_voice_v3")
-            if audio and audio.get("bytes"):
-                with st.spinner("语音转文字中..."):
-                    import openai
-                    client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
-                    audio_file = StringIO()
-                    audio_file.write(audio["bytes"])
-                    audio_file.name = "audio.webm"
-                    transcript = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
-                    if transcript.text:
-                        st.session_state._voice_text = transcript.text
-        except ImportError:
-            st.caption("语音功能未安装")
+    # Voice input (requires streamlit-mic-recorder + OPENAI_API_KEY)
+    # TODO: enable when Streamlit Cloud supports native mic access
+    # from streamlit_mic_recorder import mic_recorder
+    # audio = mic_recorder(start_prompt="🎤 录音", stop_prompt="⏹ 停止", key="mock_voice_v3")
 
-    voice_text = st.session_state.get("_voice_text", "")
-    answer = st.chat_input("输入你的回答..." if not voice_text else f"🎤: {voice_text[:50]}...", key="mock_answer_v3")
-    final_answer = voice_text or answer
+    answer = st.chat_input("输入你的回答...", key="mock_answer_v3")
 
-    if final_answer:
-        st.session_state._voice_text = ""
-        st.session_state.mock_chat_history.append({"role": "user", "content": final_answer})
+    if answer:
+        st.session_state.mock_chat_history.append({"role": "user", "content": answer})
         with st.spinner("面试官思考中..."):
-            interviewer_resp = capture_output(mock_module, mock, "answer", final_answer)
+            interviewer_resp = capture_output(mock_module, mock, "answer", answer)
         cleaned = clean_rich(interviewer_resp)
         st.session_state.mock_chat_history.append({"role": "assistant", "content": cleaned or interviewer_resp})
 
