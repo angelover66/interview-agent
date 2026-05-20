@@ -356,8 +356,8 @@ def page_position():
 
         company = st.text_input("公司名称 *", key="pos_company_v6", placeholder="如：字节跳动")
         position = st.text_input("岗位名称 *", key="pos_position_v6", placeholder="如：资深B端产品经理")
-        resp_text = st.text_area("工作职责 *（每行一条）", key="pos_resp_v6", placeholder="负责XX产品的需求分析...")
-        req_text = st.text_area("任职要求 *（每行一条）", key="pos_req_v6", placeholder="5年以上B端产品经验...")
+        resp_text = st.text_area("工作职责 *", key="pos_resp_v6", placeholder="负责XX产品的需求分析...")
+        req_text = st.text_area("任职要求 *", key="pos_req_v6", placeholder="5年以上B端产品经验...")
 
         c_save, c_cancel = st.columns([1, 1])
         with c_save:
