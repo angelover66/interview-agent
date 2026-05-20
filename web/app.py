@@ -311,8 +311,13 @@ def page_position():
                                         ],
                                     )
                                     raw = resp.choices[0].message.content
-                                    extracted = json.loads(raw.split("{", 1)[1].rsplit("}", 1)[0])
-                                    extracted = json.loads("{" + extracted + "}")
+                                    # 从返回中提取 JSON（可能被 markdown 包裹）
+                                    import re as _re
+                                    match = _re.search(r'\{[\s\S]*\}', raw)
+                                    if match:
+                                        extracted = json.loads(match.group())
+                                    else:
+                                        extracted = json.loads(raw)
                                     st.session_state._extracted_position = extracted
                                     st.success("提取成功！请确认下方信息后保存。")
                             except Exception as e:
