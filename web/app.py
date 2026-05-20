@@ -284,27 +284,29 @@ def page_position():
                     if st.button("🔍 自动提取", type="primary"):
                         with st.spinner("正在分析 JD 图片..."):
                             try:
-                                api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+                                api_key = os.environ.get("OPENAI_API_KEY", "")
                                 if not api_key:
-                                    st.error("需要 ANTHROPIC_API_KEY。DeepSeek 暂不支持图片识别，请到 console.anthropic.com 获取 API Key，然后在 Streamlit Cloud Secrets 中配置 ANTHROPIC_API_KEY。")
+                                    st.error("需要 OPENAI_API_KEY。请到 platform.openai.com/api-keys 获取，然后在 Streamlit Cloud Secrets 中配置 OPENAI_API_KEY。")
                                 else:
-                                    import anthropic
-                                    client = anthropic.Anthropic(api_key=api_key)
+                                    from openai import OpenAI
+                                    client = OpenAI(api_key=api_key)
                                     img_bytes = jd_file.read()
                                     img_b64 = base64.b64encode(img_bytes).decode('utf-8')
                                     ext = jd_file.name.split('.')[-1].lower()
                                     mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
                                     jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
-                                    resp = client.messages.create(
-                                        model="claude-sonnet-4-6",
+                                    resp = client.chat.completions.create(
+                                        model="gpt-4o",
                                         max_tokens=1024,
-                                        system=jd_prompt_text,
-                                        messages=[{"role": "user", "content": [
-                                            {"type": "image", "source": {"type": "base64", "media_type": mime, "data": img_b64}},
-                                            {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
-                                        ]}],
+                                        messages=[
+                                            {"role": "system", "content": jd_prompt_text},
+                                            {"role": "user", "content": [
+                                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                                                {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
+                                            ]}
+                                        ],
                                     )
-                                    raw = resp.content[0].text
+                                    raw = resp.choices[0].message.content
                                     extracted = json.loads(raw.split("{", 1)[1].rsplit("}", 1)[0])
                                     extracted = json.loads("{" + extracted + "}")
                                     st.session_state._extracted_position = extracted
