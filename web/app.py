@@ -284,15 +284,15 @@ def page_position():
                     if st.button("🔍 自动提取", type="primary"):
                         with st.spinner("正在 AI 分析 JD 图片..."):
                             try:
-                                api_key = os.environ.get("OPENAI_API_KEY", "")
+                                api_key = os.environ.get("DASHSCOPE_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
                                 if not api_key:
-                                    st.error("缺少 OPENAI_API_KEY，请在 Streamlit Cloud Secrets 中配置。")
+                                    st.error("缺少 DASHSCOPE_API_KEY。请到 dashscope.aliyuncs.com 获取 API Key，然后在 Streamlit Cloud Secrets 中配置。")
                                 else:
                                     from openai import OpenAI
-                                    # 使用 0011.ai 作为 OpenAI 兼容代理
+                                    # 通义千问 Vision API（OpenAI 兼容接口）
                                     client = OpenAI(
                                         api_key=api_key,
-                                        base_url="https://api.0011.ai/v1"
+                                        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
                                     )
                                     img_bytes = jd_file.read()
                                     img_b64 = base64.b64encode(img_bytes).decode('utf-8')
@@ -300,7 +300,7 @@ def page_position():
                                     mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
                                     jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
                                     resp = client.chat.completions.create(
-                                        model="gpt-5-mini",
+                                        model="qwen-vl-plus",
                                         max_tokens=1024,
                                         messages=[
                                             {"role": "system", "content": jd_prompt_text},
