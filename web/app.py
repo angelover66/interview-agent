@@ -281,11 +281,6 @@ def page_position():
         if not is_edit:
             jd_file = st.file_uploader("上传 JD 图片", type=["png", "jpg", "jpeg", "webp"], key="jd_file_v5")
             if jd_file:
-                # Show preview button (opens in new tab)
-                img_bytes = jd_file.read()
-                img_b64_preview = base64.b64encode(img_bytes).decode('utf-8')
-                st.markdown(f'<a href="data:image/jpeg;base64,{img_b64_preview}" target="_blank" style="text-decoration:none;">🖼️ 预览图片</a>', unsafe_allow_html=True)
-
                 # Detect new file upload (compare file name with last processed)
                 last_file = st.session_state.get("_last_jd_filename", "")
                 if jd_file.name != last_file:
