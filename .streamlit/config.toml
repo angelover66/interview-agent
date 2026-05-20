@@ -6,10 +6,8 @@ textColor = "#1A1A1D"
 font = "sans serif"
 
 [server]
-maxUploadSize = 50
+maxUploadSize = 10
 maxMessageSize = 200
-# 上传大文件超时保护
-fileUploaderMimeTypes = ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain", "text/markdown", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
 
 [browser]
 gatherUsageStats = false

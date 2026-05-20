@@ -276,27 +276,24 @@ def page_position():
         st.markdown("---")
         is_edit = editing_idx is not None
         st.subheader("编辑岗位" if is_edit else "新增岗位")
-        st.caption("上传 JD 图片自动提取，或手动填写四个字段。")
-        # Track if we just auto-extracted (to show success message after rerun)
-        just_extracted = st.session_state.get("_just_extracted", False)
+        st.caption("上传 JD 图片自动提取四个字段。图片仅用于 AI 识别，不上传存储。")
 
         if not is_edit:
-            jd_file = st.file_uploader("上传 JD 图片", type=["png", "jpg", "jpeg", "webp"], key="jd_file_v4")
+            jd_file = st.file_uploader("上传 JD 图片", type=["png", "jpg", "jpeg", "webp"], key="jd_file_v5")
             if jd_file:
-                # 强力压缩：600px + quality 30，确保 base64 < 50KB
-                try:
-                    from PIL import Image
-                    img = Image.open(jd_file)
-                    img.thumbnail((600, 600), Image.LANCZOS)
-                    if img.mode in ('RGBA', 'P'):
-                        img = img.convert('RGB')
-                    compressed = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-                    img.save(compressed.name, 'JPEG', quality=30, optimize=True)
-                    compressed_size = Path(compressed.name).stat().st_size
-                except Exception:
-                    compressed = None
+                # Show preview button (opens in new tab)
+                img_bytes = jd_file.read()
+                img_b64_preview = base64.b64encode(img_bytes).decode('utf-8')
+                st.markdown(f'<a href="data:image/jpeg;base64,{img_b64_preview}" target="_blank" style="text-decoration:none;">🖼️ 预览图片</a>', unsafe_allow_html=True)
 
-                # Auto-extract on upload (no button needed)
+                # Detect new file upload (compare file name with last processed)
+                last_file = st.session_state.get("_last_jd_filename", "")
+                if jd_file.name != last_file:
+                    st.session_state._extracting = False
+                    st.session_state._extracted_position = {}
+                    st.session_state._last_jd_filename = jd_file.name
+
+                # Auto-extract (runs once per file)
                 if not st.session_state.get("_extracting", False):
                     st.session_state._extracting = True
                     with st.spinner("正在 AI 识别 JD 图片..."):
@@ -306,25 +303,26 @@ def page_position():
                                 st.error("缺少 DASHSCOPE_API_KEY。")
                             else:
                                 from openai import OpenAI
-                                client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
-                                # Use compressed image for faster upload
-                                if compressed:
-                                    img_bytes = Path(compressed.name).read_bytes()
-                                    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-                                    mime = "image/jpeg"
-                                else:
-                                    img_bytes = jd_file.read()
-                                    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
-                                    ext = jd_file.name.split('.')[-1].lower()
-                                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/jpeg")
+                                # Compress on-the-fly for API (quality 30 = ~50KB base64, 不影响文字识别)
+                                from PIL import Image as PILImage
+                                pil_img = PILImage.open(jd_file)
+                                pil_img.thumbnail((600, 600), PILImage.LANCZOS)
+                                if pil_img.mode in ('RGBA', 'P'):
+                                    pil_img = pil_img.convert('RGB')
+                                buf = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                                pil_img.save(buf.name, 'JPEG', quality=30, optimize=True)
+                                compressed_bytes = Path(buf.name).read_bytes()
+                                Path(buf.name).unlink()
 
+                                img_b64 = base64.b64encode(compressed_bytes).decode('utf-8')
+                                client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
                                 jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
                                 resp = client.chat.completions.create(
                                     model="qwen-vl-plus", max_tokens=1024, timeout=30,
                                     messages=[
                                         {"role": "system", "content": jd_prompt_text},
                                         {"role": "user", "content": [
-                                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
                                             {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
                                         ]}
                                     ],
@@ -332,26 +330,39 @@ def page_position():
                                 raw = resp.choices[0].message.content
                                 import re as _re
                                 match = _re.search(r'\{[\s\S]*\}', raw)
-                                extracted = json.loads(match.group()) if match else json.loads(raw)
-                                st.session_state._extracted_position = extracted
+                                extracted_data = json.loads(match.group()) if match else json.loads(raw)
+
+                                # Write extracted data to session_state keys that widgets read from
+                                for field, key in [("company", "pos_company_v6"), ("position", "pos_position_v6"),
+                                                    ("responsibilities", "pos_resp_v6"), ("requirements", "pos_req_v6")]:
+                                    val = extracted_data.get(field, "")
+                                    if isinstance(val, list):
+                                        val = "\n".join(val)
+                                    st.session_state[key] = val
                                 st.session_state._just_extracted = True
                         except Exception as e:
                             st.error(f"识别失败，请手动填写: {e}")
-                        finally:
-                            if compressed:
-                                Path(compressed.name).unlink(missing_ok=True)
-                            # 不重置 _extracting，防止 st.rerun() 后重复提取
-                        st.rerun()
+                    st.rerun()
 
-        if just_extracted:
-            st.success("图片识别成功，已自动填充字段，请确认后保存。")
+        # Widgets read initial value from session_state (NOT value= parameter)
+        # MUST write to session_state BEFORE creating the widget
+        if "pos_company_v6" not in st.session_state:
+            st.session_state["pos_company_v6"] = ""
+        if "pos_position_v6" not in st.session_state:
+            st.session_state["pos_position_v6"] = ""
+        if "pos_resp_v6" not in st.session_state:
+            st.session_state["pos_resp_v6"] = ""
+        if "pos_req_v6" not in st.session_state:
+            st.session_state["pos_req_v6"] = ""
+
+        if st.session_state.get("_just_extracted", False):
+            st.success("识别成功，字段已自动填充。请确认后保存。")
             st.session_state._just_extracted = False
 
-        extracted = st.session_state.get("_extracted_position", {}) or {}
-        company = st.text_input("公司名称 *", value=extracted.get("company", ""), key="pos_company_v6", placeholder="如：字节跳动")
-        position = st.text_input("岗位名称 *", value=extracted.get("position", ""), key="pos_position_v6", placeholder="如：资深B端产品经理")
-        resp_text = st.text_area("工作职责 *（每行一条）", value="\n".join(extracted.get("responsibilities", [])), key="pos_resp_v6", placeholder="负责XX产品的需求分析...")
-        req_text = st.text_area("任职要求 *（每行一条）", value="\n".join(extracted.get("requirements", [])), key="pos_req_v6", placeholder="5年以上B端产品经验...")
+        company = st.text_input("公司名称 *", key="pos_company_v6", placeholder="如：字节跳动")
+        position = st.text_input("岗位名称 *", key="pos_position_v6", placeholder="如：资深B端产品经理")
+        resp_text = st.text_area("工作职责 *（每行一条）", key="pos_resp_v6", placeholder="负责XX产品的需求分析...")
+        req_text = st.text_area("任职要求 *（每行一条）", key="pos_req_v6", placeholder="5年以上B端产品经验...")
 
         c_save, c_cancel = st.columns([1, 1])
         with c_save:
@@ -361,27 +372,26 @@ def page_position():
                     "company": company.strip(), "position": position.strip(),
                     "responsibilities": [r.strip() for r in resp_text.strip().split("\n") if r.strip()],
                     "requirements": [r.strip() for r in req_text.strip().split("\n") if r.strip()],
-                    "source": extracted.get("source", "vision"),
-                    "created_at": extracted.get("created_at", datetime.now().isoformat()),
+                    "source": "vision" if st.session_state.get("_extracting") else "manual",
+                    "created_at": datetime.now().isoformat(),
                 }
                 if is_edit:
                     st.session_state.storage.update_position(editing_idx, data)
                 else:
                     st.session_state.storage.save_position(data)
-                st.session_state._extracted_position = None
-                st.session_state._show_position_form = False
-                st.session_state._edit_position_idx = None
-                st.session_state._just_extracted = False
-                st.session_state._extracting = False
+                # Clean up all form state
+                for k in ["_extracted_position", "_show_position_form", "_edit_position_idx",
+                           "_just_extracted", "_extracting", "_last_jd_filename",
+                           "pos_company_v6", "pos_position_v6", "pos_resp_v6", "pos_req_v6"]:
+                    st.session_state.pop(k, None)
                 st.success("岗位修改成功" if is_edit else "岗位保存成功")
                 st.rerun()
         with c_cancel:
             if st.button("取消", use_container_width=True):
-                st.session_state._show_position_form = False
-                st.session_state._extracted_position = None
-                st.session_state._edit_position_idx = None
-                st.session_state._just_extracted = False
-                st.session_state._extracting = False
+                for k in ["_extracted_position", "_show_position_form", "_edit_position_idx",
+                           "_just_extracted", "_extracting", "_last_jd_filename",
+                           "pos_company_v6", "pos_position_v6", "pos_resp_v6", "pos_req_v6"]:
+                    st.session_state.pop(k, None)
                 st.rerun()
 
     # ── 岗位列表表格 ──
