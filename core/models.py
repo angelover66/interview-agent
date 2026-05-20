@@ -244,6 +244,10 @@ class MockSession:
     summary: str = ""                       # 评估总结（mock review 时生成）
     overall_score: float = 0.0              # 总分（0-10）
     dimension_scores: dict = field(default_factory=dict)  # 各维度分数 {维度名: 分数}
+    strengths: list[str] = field(default_factory=list)    # 优势列表
+    weaknesses: list[str] = field(default_factory=list)   # 不足列表
+    sample_answer: str = ""                 # 示范回答（针对最薄弱项）
+    priority_improvements: list[dict] = field(default_factory=list)  # 改进建议 [{area, suggestion, priority}]
     started_at: str = ""                    # 面试开始时间（ISO 格式）
     ended_at: str = ""                      # 面试结束时间（ISO 格式）
 
@@ -259,6 +263,10 @@ class MockSession:
             "summary": self.summary,
             "overall_score": self.overall_score,
             "dimension_scores": self.dimension_scores,
+            "strengths": self.strengths,
+            "weaknesses": self.weaknesses,
+            "sample_answer": self.sample_answer,
+            "priority_improvements": self.priority_improvements,
             "started_at": self.started_at,
             "ended_at": self.ended_at,
         }
