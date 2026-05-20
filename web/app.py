@@ -212,10 +212,12 @@ def page_resume():
     if uploaded:
         storage = st.session_state.storage
         if storage.resume_exists(uploaded.name):
-            st.warning(f"「{uploaded.name}」已存在")
+            storage.delete_resume(uploaded.name)
+            path = storage.save_resume(uploaded.name, uploaded.read())
+            st.success(f"「{uploaded.name}」已更新")
         else:
             path = storage.save_resume(uploaded.name, uploaded.read())
-            st.success(f"「{uploaded.name}」已保存")
+            st.success(f"「{uploaded.name}」上传成功")
             st.rerun()
 
     st.markdown("---")
@@ -274,67 +276,82 @@ def page_position():
         st.markdown("---")
         is_edit = editing_idx is not None
         st.subheader("编辑岗位" if is_edit else "新增岗位")
-        st.caption("上传 JD 图片/PDF 自动提取，或直接手动填写。四个字段均为必填。")
+        st.caption("上传 JD 图片自动提取，或手动填写四个字段。")
+        # Track if we just auto-extracted (to show success message after rerun)
+        just_extracted = st.session_state.get("_just_extracted", False)
 
         if not is_edit:
-            jd_file = st.file_uploader("上传 JD 文件（图片/PDF，可选）", type=["png", "jpg", "jpeg", "webp", "pdf"], key="jd_file_v4")
+            jd_file = st.file_uploader("上传 JD 图片", type=["png", "jpg", "jpeg", "webp"], key="jd_file_v4")
             if jd_file:
-                if jd_file.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
-                    st.image(jd_file, caption="JD 预览", width=400)
-                    if st.button("🔍 自动提取", type="primary"):
-                        with st.spinner("正在 AI 分析 JD 图片..."):
-                            try:
-                                api_key = os.environ.get("DASHSCOPE_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
-                                if not api_key:
-                                    st.error("缺少 DASHSCOPE_API_KEY。请到 dashscope.aliyuncs.com 获取 API Key，然后在 Streamlit Cloud Secrets 中配置。")
+                # Compress image to reduce upload failures
+                try:
+                    from PIL import Image
+                    img = Image.open(jd_file)
+                    img.thumbnail((1200, 1200), Image.LANCZOS)
+                    if img.mode in ('RGBA', 'P'):
+                        img = img.convert('RGB')
+                    compressed = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                    img.save(compressed.name, 'JPEG', quality=50)
+                    compressed_size = Path(compressed.name).stat().st_size
+                except Exception:
+                    compressed = None
+
+                # Auto-extract on upload (no button needed)
+                if not st.session_state.get("_extracting", False):
+                    st.session_state._extracting = True
+                    with st.spinner("正在 AI 识别 JD 图片..."):
+                        try:
+                            api_key = os.environ.get("DASHSCOPE_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
+                            if not api_key:
+                                st.error("缺少 DASHSCOPE_API_KEY。")
+                            else:
+                                from openai import OpenAI
+                                client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+                                # Use compressed image for faster upload
+                                if compressed:
+                                    img_bytes = Path(compressed.name).read_bytes()
+                                    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+                                    mime = "image/jpeg"
                                 else:
-                                    from openai import OpenAI
-                                    # 通义千问 Vision API（OpenAI 兼容接口）
-                                    client = OpenAI(
-                                        api_key=api_key,
-                                        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
-                                    )
                                     img_bytes = jd_file.read()
                                     img_b64 = base64.b64encode(img_bytes).decode('utf-8')
                                     ext = jd_file.name.split('.')[-1].lower()
-                                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/png")
-                                    jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
-                                    resp = client.chat.completions.create(
-                                        model="qwen-vl-plus",
-                                        max_tokens=1024,
-                                        messages=[
-                                            {"role": "system", "content": jd_prompt_text},
-                                            {"role": "user", "content": [
-                                                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
-                                                {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
-                                            ]}
-                                        ],
-                                    )
-                                    raw = resp.choices[0].message.content
-                                    # 从返回中提取 JSON（可能被 markdown 包裹）
-                                    import re as _re
-                                    match = _re.search(r'\{[\s\S]*\}', raw)
-                                    if match:
-                                        extracted = json.loads(match.group())
-                                    else:
-                                        extracted = json.loads(raw)
-                                    st.session_state._extracted_position = extracted
-                                    st.success("提取成功！请确认下方信息后保存。")
-                            except Exception as e:
-                                st.error(f"提取失败: {e}")
-                elif jd_file.name.lower().endswith(".pdf"):
-                    upload_dir = Path(tempfile.gettempdir()) / "interview_agent_uploads"
-                    upload_dir.mkdir(exist_ok=True)
-                    tmp = upload_dir / jd_file.name
-                    tmp.write_bytes(jd_file.read())
-                    pdf_text = _read_file(str(tmp))
-                    st.text_area("PDF 文本内容（可复制到下方表单）", value=pdf_text[:2000] if pdf_text else "无法提取文本", height=150, disabled=True)
+                                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext, "image/jpeg")
+
+                                jd_prompt_text = (Path(__file__).parent.parent / "prompts" / "jd_extract.txt").read_text()
+                                resp = client.chat.completions.create(
+                                    model="qwen-vl-plus", max_tokens=1024,
+                                    messages=[
+                                        {"role": "system", "content": jd_prompt_text},
+                                        {"role": "user", "content": [
+                                            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+                                            {"type": "text", "text": "提取结构化岗位信息。只返回 JSON。"}
+                                        ]}
+                                    ],
+                                )
+                                raw = resp.choices[0].message.content
+                                import re as _re
+                                match = _re.search(r'\{[\s\S]*\}', raw)
+                                extracted = json.loads(match.group()) if match else json.loads(raw)
+                                st.session_state._extracted_position = extracted
+                                st.session_state._just_extracted = True
+                        except Exception as e:
+                            st.error(f"识别失败，请手动填写: {e}")
+                        finally:
+                            if compressed:
+                                Path(compressed.name).unlink(missing_ok=True)
+                            st.session_state._extracting = False
+                        st.rerun()
+
+        if just_extracted:
+            st.success("图片识别成功，已自动填充字段，请确认后保存。")
+            st.session_state._just_extracted = False
 
         extracted = st.session_state.get("_extracted_position", {}) or {}
-        company = st.text_input("公司名称 *", value=extracted.get("company", ""), key="pos_company_v5", placeholder="如：字节跳动")
-        position = st.text_input("岗位名称 *", value=extracted.get("position", ""), key="pos_position_v5", placeholder="如：资深B端产品经理")
-        resp_text = st.text_area("工作职责 *（每行一条）", value="\n".join(extracted.get("responsibilities", [])), key="pos_resp_v5", placeholder="负责XX产品的需求分析...")
-        req_text = st.text_area("任职要求 *（每行一条）", value="\n".join(extracted.get("requirements", [])), key="pos_req_v5", placeholder="5年以上B端产品经验...")
+        company = st.text_input("公司名称 *", value=extracted.get("company", ""), key="pos_company_v6", placeholder="如：字节跳动")
+        position = st.text_input("岗位名称 *", value=extracted.get("position", ""), key="pos_position_v6", placeholder="如：资深B端产品经理")
+        resp_text = st.text_area("工作职责 *（每行一条）", value="\n".join(extracted.get("responsibilities", [])), key="pos_resp_v6", placeholder="负责XX产品的需求分析...")
+        req_text = st.text_area("任职要求 *（每行一条）", value="\n".join(extracted.get("requirements", [])), key="pos_req_v6", placeholder="5年以上B端产品经验...")
 
         c_save, c_cancel = st.columns([1, 1])
         with c_save:
@@ -344,7 +361,7 @@ def page_position():
                     "company": company.strip(), "position": position.strip(),
                     "responsibilities": [r.strip() for r in resp_text.strip().split("\n") if r.strip()],
                     "requirements": [r.strip() for r in req_text.strip().split("\n") if r.strip()],
-                    "source": extracted.get("source", "manual"),
+                    "source": extracted.get("source", "vision"),
                     "created_at": extracted.get("created_at", datetime.now().isoformat()),
                 }
                 if is_edit:
@@ -354,6 +371,7 @@ def page_position():
                 st.session_state._extracted_position = None
                 st.session_state._show_position_form = False
                 st.session_state._edit_position_idx = None
+                st.session_state._just_extracted = False
                 st.success("岗位修改成功" if is_edit else "岗位保存成功")
                 st.rerun()
         with c_cancel:
@@ -361,6 +379,7 @@ def page_position():
                 st.session_state._show_position_form = False
                 st.session_state._extracted_position = None
                 st.session_state._edit_position_idx = None
+                st.session_state._just_extracted = False
                 st.rerun()
 
     # ── 岗位列表表格 ──
