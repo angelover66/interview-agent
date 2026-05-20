@@ -262,11 +262,9 @@ def page_resume():
 def page_position():
     st.header("💼 岗位库")
 
-    # ── 新增岗位按钮（右上角）──
-    c_btn1, c_btn2 = st.columns([6, 1])
-    with c_btn2:
-        if st.button("➕ 新增岗位", type="primary", use_container_width=True):
-            st.session_state._show_position_form = True
+    # ── 新增岗位按钮 ──
+    if st.button("＋ 新增岗位", type="secondary"):
+        st.session_state._show_position_form = True
 
     # ── 新增岗位弹窗表单 ──
     if st.session_state.get("_show_position_form", False):
@@ -342,7 +340,7 @@ def page_position():
     st.markdown("---")
     positions = st.session_state.storage.list_positions()
     if not positions:
-        st.info("岗位库为空，点击右上角「新增岗位」添加")
+        st.info("岗位库为空，点击上方「新增岗位」添加")
     else:
         for i, p in enumerate(positions):
             resp_summary = "；".join(p.get("responsibilities", []))[:80] + ("..." if len("；".join(p.get("responsibilities", []))) > 80 else "")
